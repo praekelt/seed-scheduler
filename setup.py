@@ -3,10 +3,10 @@ from setuptools import setup, find_packages
 setup(
     name="seed-scheduler",
     version="0.1",
-    url='http://github.com/westerncapelabs/seed-scheduler',
+    url='http://github.com/praekelt/seed-scheduler',
     license='BSD',
-    author='Western Cape Labs',
-    author_email='devops@westerncapelabs.com',
+    author='Praekelt Foundation',
+    author_email='dev@praekeltfoundation.org',
     packages=find_packages(),
     include_package_data=True,
     install_requires=[
