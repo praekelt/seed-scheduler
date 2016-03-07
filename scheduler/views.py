@@ -42,7 +42,7 @@ class GroupViewSet(viewsets.ReadOnlyModelViewSet):
 class ScheduleViewSet(viewsets.ModelViewSet):
 
     """
-    API endpoint that allows dummy models to be viewed or edited.
+    API endpoint that allows schedule models to be viewed or edited.
     """
     permission_classes = (IsAuthenticated,)
     queryset = Schedule.objects.all()
