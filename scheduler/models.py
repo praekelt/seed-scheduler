@@ -109,11 +109,11 @@ class Schedule(models.Model):
 def schedule_saved(sender, instance, **kwargs):
     if instance.cron_definition is not None and \
             instance.celery_cron_definition is not None:
-        # clean up old cron schedule
+        # clean up old cron schedule, better to delete and recreate than update
         instance.celery_cron_definition.delete()
     if instance.interval_definition is not None and \
             instance.celery_interval_definition is not None:
-        # clean up old interval schedule
+        # clean up old interval schedule as above
         instance.celery_interval_definition.delete()
     if instance.cron_definition is not None and \
             instance.celery_cron_definition is None:
@@ -128,7 +128,6 @@ def schedule_saved(sender, instance, **kwargs):
         }
         cs = CrontabSchedule.objects.create(**schedule)
         instance.celery_cron_definition = cs
-        # instance.save()
     if instance.interval_definition is not None and \
             instance.celery_interval_definition is None:
         every, period = instance.interval_definition.split()
@@ -138,4 +137,3 @@ def schedule_saved(sender, instance, **kwargs):
         }
         intsch = IntervalSchedule.objects.create(**interval)
         instance.celery_interval_definition = intsch
-        # instance.save()
