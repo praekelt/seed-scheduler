@@ -76,7 +76,6 @@ class Schedule(models.Model):
     next_send_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
     created_by = models.ForeignKey(User, related_name='schedules_created',
                                    null=True)
     updated_by = models.ForeignKey(User, related_name='schedules_updated',
