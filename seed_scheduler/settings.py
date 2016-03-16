@@ -134,7 +134,7 @@ HOOK_EVENTS = {
     'schedule.added': 'scheduler.Schedule.created+'
 }
 
-HOOK_DELIVERER = 'seed_scheduler.tasks.deliver_hook_wrapper'
+HOOK_DELIVERER = 'scheduler.tasks.deliver_hook_wrapper'
 
 HOOK_AUTH_TOKEN = os.environ.get('HOOK_AUTH_TOKEN', 'REPLACEME')
 
@@ -142,7 +142,7 @@ HOOK_AUTH_TOKEN = os.environ.get('HOOK_AUTH_TOKEN', 'REPLACEME')
 CELERY_RESULT_BACKEND = 'djcelery.backends.database:DatabaseBackend'
 CELERYBEAT_SCHEDULER = 'djcelery.schedulers.DatabaseScheduler'
 
-BROKER_URL = os.environ.get('RABBITMQ_URL', 'redis://localhost:6379/0')
+BROKER_URL = os.environ.get('BROKER_URL', 'redis://localhost:6379/0')
 
 CELERY_DEFAULT_QUEUE = 'seed_scheduler'
 CELERY_QUEUES = (
@@ -163,8 +163,14 @@ CELERY_ROUTES = {
     'celery.backend_cleanup': {
         'queue': 'mediumpriority',
     },
-    'registrations.tasks.deliver_hook_wrapper': {
+    'scheduler.tasks.deliver_hook_wrapper': {
         'queue': 'priority',
+    },
+    'scheduler.tasks.queue_tasks': {
+        'queue': 'priority',
+    },
+    'scheduler.tasks.deliver_task': {
+        'queue': 'lowpriority',
     },
 }
 
