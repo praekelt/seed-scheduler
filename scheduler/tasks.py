@@ -4,6 +4,8 @@ import requests
 from celery.task import Task
 from celery.utils.log import get_task_logger
 from django.conf import settings
+from go_http.metrics import MetricsApiClient
+
 from .models import Schedule
 
 
@@ -105,3 +107,29 @@ class QueueTasks(Task):
         return "Queued <%s> Tasks" % (queued, )
 
 queue_tasks = QueueTasks()
+
+
+def get_metric_client(session=None):
+    return MetricsApiClient(
+        auth_token=settings.METRICS_AUTH_TOKEN,
+        api_url=settings.METRICS_URL,
+        session=session)
+
+
+class FireMetric(Task):
+
+    """ Fires a metric using the MetricsApiClient
+    """
+    name = "seed_identity_store.identities.tasks.fire_metric"
+
+    def run(self, metric_name, metric_value, session=None, **kwargs):
+        metric_value = float(metric_value)
+        metric = {
+            metric_name: metric_value
+        }
+        metric_client = get_metric_client(session=session)
+        metric_client.fire(metric)
+        return "Fired metric <%s> with value <%s>" % (
+            metric_name, metric_value)
+
+fire_metric = FireMetric()

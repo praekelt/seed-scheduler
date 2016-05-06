@@ -172,10 +172,23 @@ CELERY_ROUTES = {
     'scheduler.tasks.deliver_task': {
         'queue': 'lowpriority',
     },
+    'scheduler.tasks.fire_metric': {
+        'queue': 'metrics',
+    },
 }
+
+METRICS_REALTIME = [
+    'schedules.created.sum'
+]
+METRICS_SCHEDULED = [
+]
 
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_ACCEPT_CONTENT = ['json']
+CELERY_IGNORE_RESULT = True
 
 djcelery.setup_loader()
+
+METRICS_URL = os.environ.get("METRICS_URL", None)
+METRICS_AUTH_TOKEN = os.environ.get("METRICS_AUTH_TOKEN", "REPLACEME")

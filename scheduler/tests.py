@@ -1,27 +1,80 @@
 import json
 import responses
 
+try:
+    from urllib.parse import urlparse
+except ImportError:
+    from urlparse import urlparse
+
 from django.contrib.auth.models import User
 from django.test import TestCase
+from django.conf import settings
+from django.db.models.signals import post_save
 from rest_framework import status
 from rest_framework.test import APIClient
 from rest_framework.authtoken.models import Token
 from rest_hooks.models import Hook
+from requests_testadapter import TestAdapter, TestSession
+from go_http.metrics import MetricsApiClient
 
-from .models import Schedule
-from .tasks import deliver_task, queue_tasks
+from .models import Schedule, fire_metrics_if_new
+from .tasks import deliver_task, queue_tasks, fire_metric
+from . import tasks
+
+
+class RecordingAdapter(TestAdapter):
+
+    """ Record the request that was handled by the adapter.
+    """
+    request = None
+
+    def send(self, request, *args, **kw):
+        self.request = request
+        return super(RecordingAdapter, self).send(request, *args, **kw)
 
 
 class APITestCase(TestCase):
 
     def setUp(self):
         self.client = APIClient()
+        self.session = TestSession()
 
 
 class AuthenticatedAPITestCase(APITestCase):
 
+    def make_schedule(self):
+        schedule_data = {
+            "frequency": 2,
+            "cron_definition": "25 * * * *",
+            "interval_definition": None,
+            "endpoint": "http://example.com",
+            "payload": {}
+        }
+        return Schedule.objects.create(**schedule_data)
+
+    def _replace_get_metric_client(self, session=None):
+        return MetricsApiClient(
+            auth_token=settings.METRICS_AUTH_TOKEN,
+            api_url=settings.METRICS_URL,
+            session=self.session)
+
+    def _restore_get_metric_client(self, session=None):
+        return MetricsApiClient(
+            auth_token=settings.METRICS_AUTH_TOKEN,
+            api_url=settings.METRICS_URL,
+            session=session)
+
+    def _replace_post_save_hooks(self):
+        post_save.disconnect(fire_metrics_if_new, sender=Schedule)
+
+    def _restore_post_save_hooks(self):
+        post_save.connect(fire_metrics_if_new, sender=Schedule)
+
     def setUp(self):
         super(AuthenticatedAPITestCase, self).setUp()
+        self._replace_post_save_hooks()
+        tasks.get_metric_client = self._replace_get_metric_client
+
         self.username = 'testuser'
         self.password = 'testpass'
         self.user = User.objects.create_user(self.username,
@@ -30,6 +83,10 @@ class AuthenticatedAPITestCase(APITestCase):
         token = Token.objects.create(user=self.user)
         self.token = token.key
         self.client.credentials(HTTP_AUTHORIZATION='Token ' + self.token)
+
+    def tearDown(self):
+        self._restore_post_save_hooks()
+        tasks.get_metric_client = self._restore_get_metric_client
 
 
 class TestSchedudlerAppAPI(AuthenticatedAPITestCase):
@@ -364,3 +421,66 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
         self.assertEqual(s.enabled, False)
         self.assertEqual(responses.calls[0].request.url,
                          "http://example.com/trigger/")
+
+
+class TestMetrics(AuthenticatedAPITestCase):
+
+    def check_request(
+            self, request, method, params=None, data=None, headers=None):
+        self.assertEqual(request.method, method)
+        if params is not None:
+            url = urlparse.urlparse(request.url)
+            qs = urlparse.parse_qsl(url.query)
+            self.assertEqual(dict(qs), params)
+        if headers is not None:
+            for key, value in headers.items():
+                self.assertEqual(request.headers[key], value)
+        if data is None:
+            self.assertEqual(request.body, None)
+        else:
+            self.assertEqual(json.loads(request.body), data)
+
+    def _mount_session(self):
+        response = [{
+            'name': 'foo',
+            'value': 9000,
+            'aggregator': 'bar',
+        }]
+        adapter = RecordingAdapter(json.dumps(response).encode('utf-8'))
+        self.session.mount(
+            "http://metrics-url/metrics/", adapter)
+        return adapter
+
+    def test_direct_fire(self):
+        # Setup
+        adapter = self._mount_session()
+        # Execute
+        result = fire_metric.apply_async(kwargs={
+            "metric_name": 'foo.last',
+            "metric_value": 1,
+            "session": self.session
+        })
+        # Check
+        self.check_request(
+            adapter.request, 'POST',
+            data={"foo.last": 1.0}
+        )
+        self.assertEqual(result.get(),
+                         "Fired metric <foo.last> with value <1.0>")
+
+    def test_created_metrics(self):
+        # Setup
+        adapter = self._mount_session()
+        # reconnect metric post_save hook
+        post_save.connect(fire_metrics_if_new, sender=Schedule)
+
+        # Execute
+        self.make_schedule()
+
+        # Check
+        self.check_request(
+            adapter.request, 'POST',
+            data={"schedules.created.sum": 1.0}
+        )
+        # remove post_save hooks to prevent teardown errors
+        post_save.disconnect(fire_metrics_if_new, sender=Schedule)

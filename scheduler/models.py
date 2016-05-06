@@ -6,7 +6,7 @@ from django.contrib.auth.models import User
 from django.db import models
 from django.utils.encoding import python_2_unicode_compatible
 from django.dispatch import receiver
-from django.db.models.signals import pre_save
+from django.db.models.signals import pre_save, post_save
 from django.core.exceptions import ValidationError
 from django.utils.translation import ugettext_lazy as _
 from djcelery.models import CrontabSchedule, IntervalSchedule, PeriodicTask
@@ -155,3 +155,13 @@ def schedule_saved(sender, instance, **kwargs):
                 "args": '["interval", %s]' % intsch.id
             }
             PeriodicTask.objects.create(**pt)
+
+
+@receiver(post_save, sender=Schedule)
+def fire_metrics_if_new(sender, instance, created, **kwargs):
+    from .tasks import fire_metric
+    if created:
+        fire_metric.apply_async(kwargs={
+            "metric_name": 'schedules.created.sum',
+            "metric_value": 1.0
+        })
