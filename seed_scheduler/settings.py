@@ -12,7 +12,13 @@ import os
 
 import dj_database_url
 import djcelery
+import mimetypes
+
 from kombu import Exchange, Queue
+
+# Support SVG on admin
+mimetypes.add_type("image/svg+xml", ".svg", True)
+mimetypes.add_type("image/svg+xml", ".svgz", True)
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
@@ -163,7 +169,7 @@ CELERY_ROUTES = {
     'celery.backend_cleanup': {
         'queue': 'mediumpriority',
     },
-    'scheduler.tasks.deliver_hook_wrapper': {
+    'scheduler.tasks.DeliverHook': {
         'queue': 'priority',
     },
     'scheduler.tasks.queue_tasks': {
