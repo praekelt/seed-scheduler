@@ -24,7 +24,7 @@ class ScheduleSerializer(serializers.HyperlinkedModelSerializer):
                             'celery_cron_definition',
                             'celery_interval_definition')
         fields = ('url', 'id', 'frequency', 'cron_definition',
-                  'interval_definition', 'endpoint', 'payload',
+                  'interval_definition', 'endpoint', 'payload', 'auth_token',
                   'next_send_at', 'created_at', 'created_by', 'updated_at',
                   'updated_by')
 

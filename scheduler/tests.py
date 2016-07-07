@@ -108,7 +108,8 @@ class TestSchedudlerAppAPI(AuthenticatedAPITestCase):
             "cron_definition": "25 * * * *",
             "interval_definition": None,
             "endpoint": "http://example.com",
-            "payload": {}
+            "payload": {},
+            "auth_token": "blah"
         }
         response = self.client.post('/api/v1/schedule/',
                                     json.dumps(post_data),
@@ -120,6 +121,7 @@ class TestSchedudlerAppAPI(AuthenticatedAPITestCase):
         self.assertEqual(d.cron_definition, "25 * * * *")
         self.assertIsNotNone(d.celery_cron_definition)
         self.assertEqual(d.celery_cron_definition.minute, '25')
+        self.assertEqual(d.auth_token, 'blah')
 
     def test_create_schedule_cron_failed(self):
         post_data = {
