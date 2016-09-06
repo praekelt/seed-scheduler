@@ -130,6 +130,39 @@ class TestSchedudlerAppAPI(AuthenticatedAPITestCase):
         self.assertEqual(d.celery_cron_definition.minute, '25')
         self.assertEqual(d.auth_token, 'blah')
 
+    def test_create_schedule_cron_mappings(self):
+        base_schedule = {
+            "frequency": 2,
+            "cron_definition": "",
+            "interval_definition": None,
+            "endpoint": "http://example.com",
+            "payload": {}
+        }
+        schedule1 = base_schedule.copy()
+        schedule1["cron_definition"] = "25 * * * * *"
+        d = Schedule.objects.create(**schedule1)
+        self.assertEqual(d.celery_cron_definition.minute, '25')
+
+        schedule2 = base_schedule.copy()
+        schedule2["cron_definition"] = "* 14 * * * *"
+        d = Schedule.objects.create(**schedule2)
+        self.assertEqual(d.celery_cron_definition.hour, '14')
+
+        schedule3 = base_schedule.copy()
+        schedule3["cron_definition"] = "* * * * 1 *"
+        d = Schedule.objects.create(**schedule3)
+        self.assertEqual(d.celery_cron_definition.day_of_week, '1')
+
+        schedule4 = base_schedule.copy()
+        schedule4["cron_definition"] = "* * 14 * * *"
+        d = Schedule.objects.create(**schedule4)
+        self.assertEqual(d.celery_cron_definition.day_of_month, '14')
+
+        schedule5 = base_schedule.copy()
+        schedule5["cron_definition"] = "* * * 10 * *"
+        d = Schedule.objects.create(**schedule5)
+        self.assertEqual(d.celery_cron_definition.month_of_year, '10')
+
     def test_create_schedule_cron_failed(self):
         post_data = {
             "frequency": 2,
