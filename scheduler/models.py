@@ -58,19 +58,21 @@ class Schedule(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     frequency = models.IntegerField(null=True, blank=True)
     triggered = models.IntegerField(null=False, blank=False, default=0)
-    cron_definition = models.CharField(max_length=500, null=True,
+    cron_definition = models.CharField(max_length=500,
+                                       null=True, blank=True,
                                        validators=[validate_crontab])
     celery_cron_definition = models.ForeignKey(
         CrontabSchedule,
         on_delete=models.CASCADE,
-        null=True
+        null=True, blank=True
     )
-    interval_definition = models.CharField(max_length=100, null=True,
+    interval_definition = models.CharField(max_length=100,
+                                           null=True, blank=True,
                                            validators=[validate_interval])
     celery_interval_definition = models.ForeignKey(
         IntervalSchedule,
         on_delete=models.CASCADE,
-        null=True
+        null=True, blank=True
     )
     endpoint = models.CharField(max_length=500, null=False)
     auth_token = models.CharField(max_length=500, null=True, blank=True)
@@ -80,9 +82,9 @@ class Schedule(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, related_name='schedules_created',
-                                   null=True)
+                                   null=True, blank=True)
     updated_by = models.ForeignKey(User, related_name='schedules_updated',
-                                   null=True)
+                                   null=True, blank=True)
     user = property(lambda self: self.created_by)
 
     def serialize_hook(self, hook):
