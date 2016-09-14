@@ -229,6 +229,31 @@ class TestSchedudlerAppAPI(AuthenticatedAPITestCase):
                 ]
             })
 
+    def test_update_schedule(self):
+        # Setup
+        s = self.make_schedule()
+        post_data = {
+            "enabled": False
+        }
+        # Precheck
+        self.assertEqual(s.enabled, True)
+        self.assertEqual(s.frequency, 2)
+        self.assertEqual(s.cron_definition, "25 * * * *")
+        self.assertEqual(s.interval_definition, None)
+        self.assertEqual(s.endpoint, "http://example.com")
+        # Execute
+        response = self.client.patch('/api/v1/schedule/%s/' % s.id,
+                                     json.dumps(post_data),
+                                     content_type='application/json')
+        s.refresh_from_db()
+        # Check
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(s.enabled, False)
+        self.assertEqual(s.frequency, 2)
+        self.assertEqual(s.cron_definition, "25 * * * *")
+        self.assertEqual(s.interval_definition, None)
+        self.assertEqual(s.endpoint, "http://example.com")
+
     def test_create_webhook(self):
         # Setup
         user = User.objects.get(username='testuser')
