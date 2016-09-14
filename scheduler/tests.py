@@ -429,8 +429,7 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
 
     @responses.activate
     def test_queue_tasks_one_with_none_frequency(self):
-        # Tests that with two schedules, one with a None frequency, it
-        # currently just runs one
+        # Tests that with two schedules, one with a None frequency, it runs two
         # Setup
         expected_body = {
             "run": 1
@@ -438,6 +437,11 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
         responses.add(
             responses.POST,
             "http://example.com/trigger/",
+            json.dumps(expected_body),
+            status=200, content_type='application/json')
+        responses.add(
+            responses.POST,
+            "http://example.com/runnone/",
             json.dumps(expected_body),
             status=200, content_type='application/json')
 
@@ -465,10 +469,14 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
             "lookup_id": runnone.celery_cron_definition.id})
 
         # Check
-        self.assertEqual(result.get(), "Queued <1> Tasks")
-        s = Schedule.objects.get(id=run.id)
-        self.assertEqual(s.triggered, 1)
+        self.assertEqual(result.get(), "Queued <2> Tasks")
+        s1 = Schedule.objects.get(id=run.id)
+        self.assertEqual(s1.triggered, 1)
+        s2 = Schedule.objects.get(id=runnone.id)
+        self.assertEqual(s2.triggered, 1)
         self.assertEqual(responses.calls[0].request.url,
+                         "http://example.com/runnone/")
+        self.assertEqual(responses.calls[1].request.url,
                          "http://example.com/trigger/")
 
     @responses.activate
