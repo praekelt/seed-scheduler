@@ -428,6 +428,50 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
                          "http://example.com/trigger/")
 
     @responses.activate
+    def test_queue_tasks_one_with_none_frequency(self):
+        # Tests that with two schedules, one with a None frequency, it
+        # currently just runs one
+        # Setup
+        expected_body = {
+            "run": 1
+        }
+        responses.add(
+            responses.POST,
+            "http://example.com/trigger/",
+            json.dumps(expected_body),
+            status=200, content_type='application/json')
+
+        schedule_data = {
+            "frequency": 2,
+            "cron_definition": "25 * * * *",
+            "interval_definition": None,
+            "endpoint": "http://example.com/trigger/",
+            "payload": {"run": 1}
+        }
+        run = Schedule.objects.create(**schedule_data)
+        schedule_data = {
+            "frequency": None,
+            "cron_definition": "25 * * * *",
+            "interval_definition": None,
+            "endpoint": "http://example.com/runnone/",
+            "payload": {"run": 1}
+        }
+        runnone = Schedule.objects.create(**schedule_data)
+        runnone.save()
+
+        # Execute
+        result = queue_tasks.apply_async(kwargs={
+            "schedule_type": "crontab",
+            "lookup_id": runnone.celery_cron_definition.id})
+
+        # Check
+        self.assertEqual(result.get(), "Queued <1> Tasks")
+        s = Schedule.objects.get(id=run.id)
+        self.assertEqual(s.triggered, 1)
+        self.assertEqual(responses.calls[0].request.url,
+                         "http://example.com/trigger/")
+
+    @responses.activate
     def test_queue_tasks_one_interval_disable(self):
         # Tests does a final trigger now set to enabled = False
         # Setup

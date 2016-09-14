@@ -94,7 +94,7 @@ class QueueTasks(Task):
         l.info("Filtered schedule count: <%s>" % schedules.count())
         queued = 0
         for schedule in schedules:
-            if schedule.triggered < schedule.frequency:
+            if schedule.frequency is not None and schedule.triggered < schedule.frequency:
                 schedule.triggered += 1
                 if schedule.triggered == schedule.frequency:
                     # schedule must have hit it's limit
