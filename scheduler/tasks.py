@@ -94,7 +94,14 @@ class QueueTasks(Task):
         l.info("Filtered schedule count: <%s>" % schedules.count())
         queued = 0
         for schedule in schedules:
-            if schedule.triggered < schedule.frequency:
+            if schedule.frequency is None:
+                schedule.triggered += 1
+                schedule.save()
+                DeliverTask.apply_async(kwargs={
+                    "schedule_id": str(schedule.id)})
+                queued += 1
+
+            elif schedule.triggered < schedule.frequency:
                 schedule.triggered += 1
                 if schedule.triggered == schedule.frequency:
                     # schedule must have hit it's limit

@@ -229,6 +229,31 @@ class TestSchedudlerAppAPI(AuthenticatedAPITestCase):
                 ]
             })
 
+    def test_update_schedule(self):
+        # Setup
+        s = self.make_schedule()
+        post_data = {
+            "enabled": False
+        }
+        # Precheck
+        self.assertEqual(s.enabled, True)
+        self.assertEqual(s.frequency, 2)
+        self.assertEqual(s.cron_definition, "25 * * * *")
+        self.assertEqual(s.interval_definition, None)
+        self.assertEqual(s.endpoint, "http://example.com")
+        # Execute
+        response = self.client.patch('/api/v1/schedule/%s/' % s.id,
+                                     json.dumps(post_data),
+                                     content_type='application/json')
+        s.refresh_from_db()
+        # Check
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(s.enabled, False)
+        self.assertEqual(s.frequency, 2)
+        self.assertEqual(s.cron_definition, "25 * * * *")
+        self.assertEqual(s.interval_definition, None)
+        self.assertEqual(s.endpoint, "http://example.com")
+
     def test_create_webhook(self):
         # Setup
         user = User.objects.get(username='testuser')
@@ -425,6 +450,58 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
         s = Schedule.objects.get(id=run.id)
         self.assertEqual(s.triggered, 1)
         self.assertEqual(responses.calls[0].request.url,
+                         "http://example.com/trigger/")
+
+    @responses.activate
+    def test_queue_tasks_one_with_none_frequency(self):
+        # Tests that with two schedules, one with a None frequency, it runs two
+        # Setup
+        expected_body = {
+            "run": 1
+        }
+        responses.add(
+            responses.POST,
+            "http://example.com/trigger/",
+            json.dumps(expected_body),
+            status=200, content_type='application/json')
+        responses.add(
+            responses.POST,
+            "http://example.com/runnone/",
+            json.dumps(expected_body),
+            status=200, content_type='application/json')
+
+        schedule_data = {
+            "frequency": 2,
+            "cron_definition": "25 * * * *",
+            "interval_definition": None,
+            "endpoint": "http://example.com/trigger/",
+            "payload": {"run": 1}
+        }
+        run = Schedule.objects.create(**schedule_data)
+        schedule_data = {
+            "frequency": None,
+            "cron_definition": "25 * * * *",
+            "interval_definition": None,
+            "endpoint": "http://example.com/runnone/",
+            "payload": {"run": 1}
+        }
+        runnone = Schedule.objects.create(**schedule_data)
+        runnone.save()
+
+        # Execute
+        result = queue_tasks.apply_async(kwargs={
+            "schedule_type": "crontab",
+            "lookup_id": runnone.celery_cron_definition.id})
+
+        # Check
+        self.assertEqual(result.get(), "Queued <2> Tasks")
+        s1 = Schedule.objects.get(id=run.id)
+        self.assertEqual(s1.triggered, 1)
+        s2 = Schedule.objects.get(id=runnone.id)
+        self.assertEqual(s2.triggered, 1)
+        self.assertEqual(responses.calls[0].request.url,
+                         "http://example.com/runnone/")
+        self.assertEqual(responses.calls[1].request.url,
                          "http://example.com/trigger/")
 
     @responses.activate
