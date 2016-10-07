@@ -15,7 +15,6 @@ Seed Scheduler documentation contents
     models
     auth
     apis
-    integrations
     production
 
 Indices, glossary and tables
