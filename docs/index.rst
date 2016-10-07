@@ -23,3 +23,17 @@ developing the Seed Scheduler:
   parameters.
 * Learn about what is required when running the service in
   :doc:`Production <production>`
+
+
+How the task scheduling works
+=============================
+
+The Seed Scheduler uses Celery and the django-celery integration package to
+handle the scheduling of the periodic tasks.
+
+The schedules are kept in tables in the PostgreSQL database that a Celery beat
+worker processes and then hands off actual task execution to another Celery
+worker process.
+
+When a new Schedule object is created via the :doc:`Seed Scheduler API <apis>`,
+a corresponding django-celery PeriodicTask object is created for that schedule.
