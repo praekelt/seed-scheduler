@@ -240,15 +240,41 @@ Schedules
 
     Creates a new Schedule.
 
-.. http:get:: /schedule/(int:schedule_id)/
+    :<json int frequency: an optional integer number of times a task should be run in total.
+    :<json string endpoint: a URL to POST to when this schedule is run.
+    :<json string cron_definition: A crontab definition of when to run this schedule.
+    :<json string inteval_definition: An interval definition of when to run this schedule.
+    :<json string auth_token: An auth token to use when POSTing to the endpoint.
+    :<json json payload: The JSON payload to include when POSTing to the endpoint.
+    :<json boolean enabled: A boolean flag of whether this schedule is enabled.
+
+    :resheader Location: the URL to the newly created resource.
+
+    :status 201: created.
+    :status 400: invalid data.
+    :status 401: the token is invalid/missing.
+
+.. http:get:: /schedule/(uuid:schedule_id)/
 
     Retuns the Schedule record for a given schedule_id.
 
-.. http:put:: /schedule/(int:schedule_id)/
+.. http:put:: /schedule/(uuid:schedule_id)/
 
     Updates the Schedule record for a given schedule_id.
 
-.. http:delete:: /schedule/(int:schedule_id)/
+    :<json int frequency: an optional integer number of times a task should be run in total.
+    :<json string endpoint: a URL to POST to when this schedule is run.
+    :<json string cron_definition: A crontab definition of when to run this schedule.
+    :<json string inteval_definition: An interval definition of when to run this schedule.
+    :<json string auth_token: An auth token to use when POSTing to the endpoint.
+    :<json json payload: The JSON payload to include when POSTing to the endpoint.
+    :<json boolean enabled: A boolean flag of whether this schedule is enabled.
+
+    :status 200: updated.
+    :status 400: invalid data.
+    :status 401: the token is invalid/missing.
+
+.. http:delete:: /schedule/(uuid:schedule_id)/
 
     Deletes the Schedule record for a given schedule_id.
 
