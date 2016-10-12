@@ -116,6 +116,7 @@ class Schedule(models.Model):
 @receiver(pre_save, sender=Schedule)
 def schedule_saved(sender, instance, **kwargs):
     if instance.cron_definition is not None and \
+            instance.cron_definition != "" and \
             instance.celery_cron_definition is None:
         # CronTab package just used to parse and validate the string nicely.
         entry = CronTab(instance.cron_definition)
@@ -139,6 +140,7 @@ def schedule_saved(sender, instance, **kwargs):
             }
             PeriodicTask.objects.create(**pt)
     if instance.interval_definition is not None and \
+            instance.interval_definition != "" and \
             instance.celery_interval_definition is None:
         every, period = instance.interval_definition.split()
         interval = {
