@@ -93,7 +93,7 @@ class QueueTasks(Task):
         # create tasks for each active schedule
         l.info("Filtered schedule count: <%s>" % schedules.count())
         queued = 0
-        for schedule in schedules:
+        for schedule in schedules.iterator():
             if schedule.frequency is None:
                 schedule.triggered += 1
                 schedule.save()
