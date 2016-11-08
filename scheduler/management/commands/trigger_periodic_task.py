@@ -7,7 +7,7 @@ from djcelery.schedulers import ModelEntry
 
 class Command(BaseCommand):
     help = ('Fire djcelery PeriodicTask manually. \n\n'
-            '* Only use this is things went wrong *')
+            '* Only use this if things went HORRIBLY WRONG *')
 
     def add_arguments(self, parser):
         parser.add_argument(
