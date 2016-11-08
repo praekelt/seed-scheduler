@@ -1,5 +1,9 @@
 import json
 import responses
+try:
+    from StringIO import StringIO
+except ImportError:
+    from io import StringIO
 
 try:
     from urllib.parse import urlparse
@@ -10,6 +14,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from django.conf import settings
 from django.db.models.signals import post_save
+from django.core.management import call_command
 from rest_framework import status
 from rest_framework.test import APIClient
 from rest_framework.authtoken.models import Token
@@ -20,6 +25,10 @@ from go_http.metrics import MetricsApiClient
 from .models import Schedule, fire_metrics_if_new
 from .tasks import deliver_task, queue_tasks, fire_metric
 from . import tasks
+
+from djcelery.models import PeriodicTask, CrontabSchedule
+
+from seed_scheduler import celery_app
 
 
 class RecordingAdapter(TestAdapter):
@@ -713,3 +722,39 @@ class TestHealthcheckAPI(AuthenticatedAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["up"], True)
         self.assertEqual(response.data["result"]["database"], "Accessible")
+
+
+@celery_app.task
+def noop(argument):
+    return argument
+
+
+class TestTriggerPeriodicTask(TestCase):
+
+    timeout = 1
+
+    def test_trigger_periodic_task(self):
+        cs = CrontabSchedule.objects.create(**{
+            "minute": '*',
+            "hour": '*',
+            "day_of_week": '*',
+            "day_of_month": '*',
+            "month_of_year": '*',
+        })
+
+        pt = PeriodicTask.objects.create(**{
+            "name": "noop task",
+            "task": "scheduler.tests.noop",
+            "crontab": cs,
+            "enabled": True,
+            "args": '["hello world"]',
+        })
+        stdout = StringIO()
+        stderr = StringIO()
+        self.assertFalse(pt.last_run_at)
+        call_command('trigger_periodic_task', str(pt.pk),
+                     '--confirm',
+                     stdout=stdout, stderr=stderr)
+        self.assertEqual(stdout.getvalue().strip(), 'hello world')
+        pt_after_run = PeriodicTask.objects.get(pk=pt.pk)
+        self.assertTrue(pt_after_run.last_run_at)

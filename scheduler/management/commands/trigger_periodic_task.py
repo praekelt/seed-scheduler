@@ -1,5 +1,6 @@
 from django.core.management import BaseCommand, CommandError
 from djcelery.models import PeriodicTask
+from djcelery.schedulers import ModelEntry
 
 
 class Command(BaseCommand):
@@ -15,26 +16,24 @@ class Command(BaseCommand):
             help=('Do not ask for any kind of confirmation, '
                   'I know what I am doing'))
         parser.add_argument(
-            '--ignore-result', action='store_false', default=True,
+            '--ignore-result', action='store_true', default=False,
             help=('Do not wait for the task to complete and return '
                   'the result'))
         parser.add_argument(
             '--timeout', type=int, default=60,
             help=('How long to wait in secods for the result to return, '
                   'set to 0 to disable. Defaults to 60 seconds.'))
-        parser.add_argument()
 
     def handle(self, *args, **options):
-        print options
         periodic_task_id = options['periodic-task-id']
-        ignore_result = options['ignore-result']
+        ignore_result = options['ignore_result']
         if options['timeout']:
             timeout = options['timeout']
         else:
             timeout = None
 
         def confirm(prompt):
-            if options['no_input']:
+            if options['confirm']:
                 return True
             try:
                 return raw_input(
@@ -60,14 +59,17 @@ class Command(BaseCommand):
 
         if not confirm(msg):
             raise CommandError(
-                'Please confirm, you need to know what you are doing.')
+                'Please confirm as you need to know what you are doing.')
 
         from celery import current_app
+        model_entry = ModelEntry(periodic_task)
+
         app = current_app._get_current_object()
-        async_result = app.send_task(periodic_task.task,
-                                     periodic_task.args,
-                                     periodic_task.kwargs,
-                                     **periodic_task.options)
+        task = app.tasks.get(model_entry.task)
+        async_result = task.apply_async(model_entry.args, model_entry.kwargs,
+                                        **model_entry.options)
+        periodic_task.last_run_at = app.now()
+        periodic_task.save()
 
         if not ignore_result:
             result = async_result.get(timeout=timeout)
