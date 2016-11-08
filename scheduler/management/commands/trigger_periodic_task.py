@@ -15,7 +15,7 @@ class Command(BaseCommand):
             help='What is the PK of the PeriodicTask to fire manually')
         parser.add_argument(
             '--confirm', action='store_true', default=False,
-            help=('Do not ask for any kind of confirmation, '
+            help=('Do not ask for any kind of confirmation as '
                   'I know what I am doing'))
         parser.add_argument(
             '--ignore-result', action='store_true', default=False,
@@ -23,7 +23,7 @@ class Command(BaseCommand):
                   'the result'))
         parser.add_argument(
             '--timeout', type=int, default=60,
-            help=('How long to wait in secods for the result to return, '
+            help=('How long to wait in seconds for the result to return, '
                   'set to 0 to disable. Defaults to 60 seconds.'))
 
     def handle(self, *args, **options):
@@ -56,7 +56,7 @@ class Command(BaseCommand):
                     self.style.NOTICE(periodic_task.last_run_at)))
         else:
             msg = ("The task %s has never been run before.\n"
-                   "Are you sure you want to resubmit this periodic task?" % (
+                   "Are you sure you want to submit this periodic task?" % (
                     self.style.NOTICE(periodic_task),))
 
         if not confirm(msg):
