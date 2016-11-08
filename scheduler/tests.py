@@ -1,9 +1,6 @@
 import json
 import responses
-try:
-    from StringIO import StringIO
-except ImportError:
-    from io import StringIO
+from six import StringIO
 
 try:
     from urllib.parse import urlparse

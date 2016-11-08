@@ -1,3 +1,5 @@
+from six.moves import input
+
 from django.core.management import BaseCommand, CommandError
 from djcelery.models import PeriodicTask
 from djcelery.schedulers import ModelEntry
@@ -36,7 +38,7 @@ class Command(BaseCommand):
             if options['confirm']:
                 return True
             try:
-                return raw_input(
+                return input(
                     "%s [y/n] > " % (prompt,)).lower() == "y"
             except KeyboardInterrupt:
                 raise CommandError("Please confirm the question.")
