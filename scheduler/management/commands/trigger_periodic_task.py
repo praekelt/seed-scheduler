@@ -1,4 +1,4 @@
-from six.moves import input
+from django.utils.six.moves import input
 
 from django.core.management import BaseCommand, CommandError
 from djcelery.models import PeriodicTask
