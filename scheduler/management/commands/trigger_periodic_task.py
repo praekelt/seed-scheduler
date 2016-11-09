@@ -68,8 +68,15 @@ class Command(BaseCommand):
 
         app = current_app._get_current_object()
         task = app.tasks.get(model_entry.task)
-        async_result = task.apply_async(model_entry.args, model_entry.kwargs,
-                                        **model_entry.options)
+        if task:
+            async_result = task.apply_async(
+                model_entry.args, model_entry.kwargs,
+                **model_entry.options)
+        else:
+            app.send_task(
+                model_entry.task, model_entry.args, model_entry.kwargs,
+                **model_entry.options)
+
         periodic_task.last_run_at = app.now()
         periodic_task.save()
 
