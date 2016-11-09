@@ -73,7 +73,7 @@ class Command(BaseCommand):
                 model_entry.args, model_entry.kwargs,
                 **model_entry.options)
         else:
-            app.send_task(
+            async_result = app.send_task(
                 model_entry.task, model_entry.args, model_entry.kwargs,
                 **model_entry.options)
 
