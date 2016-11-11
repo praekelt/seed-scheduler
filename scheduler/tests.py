@@ -890,7 +890,7 @@ class TestTriggerDeliverTasks(TestCase):
             auth_token='sbm_token',
             payload={})
 
-        Schedule.objects.create(
+        resend = Schedule.objects.create(
             enabled=True,
             celery_interval_definition=self.interval_schedule,
             endpoint=('http://sbm.example.org/api/v1/subscriptions'
@@ -911,4 +911,4 @@ class TestTriggerDeliverTasks(TestCase):
 
         self.assertEqual(
             stdout.getvalue().strip(),
-            'need to resend to address: +27222222222')
+            'need to resend schedule: %s' % (resend,))

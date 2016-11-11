@@ -172,7 +172,7 @@ class Command(BaseCommand):
 
             if any_outbounds:
                 continue
-            self.stdout.write('need to resend to address: %s' % (address,))
+            self.stdout.write('need to resend schedule: %s' % (schedule,))
 
     def get_addresses(self, identity, default_addr_type):
         details = identity.get('details', {})
