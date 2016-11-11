@@ -42,7 +42,6 @@ def mk_validator(validator_class):
     return validator_callback
 
 
-
 class MessageSenderApiClient(object):
     """
     Client for Message Sender Service.
