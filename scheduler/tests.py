@@ -1,17 +1,20 @@
 import json
 import responses
-from six import StringIO
+from django.utils.six import StringIO
+from datetime import timedelta
 
 try:
-    from urllib.parse import urlparse
+    from urllib.parse import urlparse, urlencode
 except ImportError:
     from urlparse import urlparse
+    from urllib import urlencode
 
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.conf import settings
 from django.db.models.signals import post_save
 from django.core.management import call_command
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 from rest_framework.authtoken.models import Token
@@ -23,7 +26,7 @@ from .models import Schedule, fire_metrics_if_new
 from .tasks import deliver_task, queue_tasks, fire_metric
 from . import tasks
 
-from djcelery.models import PeriodicTask, CrontabSchedule
+from djcelery.models import PeriodicTask, CrontabSchedule, IntervalSchedule
 
 from seed_scheduler import celery_app
 
@@ -755,3 +758,157 @@ class TestTriggerPeriodicTask(TestCase):
         self.assertEqual(stdout.getvalue().strip(), 'hello world')
         pt_after_run = PeriodicTask.objects.get(pk=pt.pk)
         self.assertTrue(pt_after_run.last_run_at)
+
+
+class TestTriggerDeliverTasks(TestCase):
+
+    timeout = 1
+
+    def setUp(self):
+        post_save.disconnect(fire_metrics_if_new, sender=Schedule)
+        self.session = TestSession()
+        self.crontab_schedule = CrontabSchedule.objects.create(**{
+            "minute": '*',
+            "hour": '*',
+            "day_of_week": '*',
+            "day_of_month": '*',
+            "month_of_year": '*',
+        })
+
+        self.periodic_crontab_task = PeriodicTask.objects.create(**{
+            "name": "noop crontab task",
+            "task": "scheduler.tests.noop",
+            "crontab": self.crontab_schedule,
+            "enabled": True,
+            "args": '["hello world"]',
+        })
+
+        self.interval_schedule = IntervalSchedule.objects.create(**{
+            'every': 5,
+            'period': 'minutes',
+        })
+
+        self.periodic_interval_task = PeriodicTask.objects.create(**{
+            'name': 'noop interval task',
+            'task': 'scheduler.tests.noop',
+            'interval': self.interval_schedule,
+            'enabled': True,
+            'args': '["hello world"]',
+        })
+
+    @responses.activate
+    def test_deliver_tasks_interval(self):
+
+        since = timezone.now() - timedelta(days=1)
+        until = timezone.now() + timedelta(days=1)
+
+        responses.add(
+            responses.GET,
+            'http://sbm.example.org/api/v1/subscriptions/subscription-uuid-1/',
+            status=200, json={
+                'identity': 'id-uuid-1',
+            })
+
+        responses.add(
+            responses.GET,
+            'http://sbm.example.org/api/v1/subscriptions/subscription-uuid-2/',
+            status=200, json={
+                'identity': 'id-uuid-2',
+            })
+
+        responses.add(
+            responses.GET,
+            'http://idstore.example.org/api/v1/identities/id-uuid-1/',
+            status=200, json={
+                'details': {
+                    'addresses': {
+                        'msisdn': {
+                            '+27000000000': {
+                                'default': True
+                            },
+                            '+27111111111': {},
+                        }
+                    },
+                    'default_addr_type': 'msisdn',
+                }
+            })
+
+        responses.add(
+            responses.GET,
+            'http://idstore.example.org/api/v1/identities/id-uuid-2/',
+            status=200, json={
+                'details': {
+                    'addresses': {
+                        'msisdn': {
+                            '+27222222222': {
+                                'default': True
+                            }
+                        }
+                    },
+                    'default_addr_type': 'msisdn',
+                }
+            })
+
+        responses.add(
+            responses.GET,
+            'http://sender.example.org/api/v1/outbound/?%s' % (urlencode({
+                'to_addr': '+27000000000',
+                'after': since.isoformat(),
+                'before': until.isoformat(),
+            }),),
+            status=200, json=[{'some': 'sent message'}],
+            match_querystring=True)
+
+        responses.add(
+            responses.GET,
+            'http://sender.example.org/api/v1/outbound/?%s' % (urlencode({
+                'to_addr': '+27111111111',
+                'after': since.isoformat(),
+                'before': until.isoformat(),
+            }),),
+            status=200, json=[],
+            match_querystring=True)
+
+        responses.add(
+            responses.GET,
+            'http://sender.example.org/api/v1/outbound/?%s' % (urlencode({
+                'to_addr': '+27222222222',
+                'after': since.isoformat(),
+                'before': until.isoformat(),
+            }),),
+            status=200, json=[],
+            match_querystring=True)
+
+        stdout = StringIO()
+        stderr = StringIO()
+
+        Schedule.objects.create(
+            enabled=True,
+            celery_interval_definition=self.interval_schedule,
+            endpoint=('http://sbm.example.org/api/v1/subscriptions'
+                      '/subscription-uuid-1/send'),
+            auth_token='sbm_token',
+            payload={})
+
+        Schedule.objects.create(
+            enabled=True,
+            celery_interval_definition=self.interval_schedule,
+            endpoint=('http://sbm.example.org/api/v1/subscriptions'
+                      '/subscription-uuid-2/send'),
+            auth_token='sbm_token',
+            payload={})
+
+        call_command(
+            'trigger_deliver_tasks',
+            '--identity-store-token', 'token',
+            '--identity-store-url', 'http://idstore.example.org/api/v1',
+            '--message-sender-token', 'token',
+            '--message-sender-url', 'http://sender.example.org/api/v1',
+            '--since', since.isoformat(),
+            '--until', until.isoformat(),
+            'interval:%s' % (self.interval_schedule.pk,),
+            stdout=stdout, stderr=stderr)
+
+        self.assertEqual(
+            stdout.getvalue().strip(),
+            'need to resend to address: +27222222222')
