@@ -1,6 +1,10 @@
 import os
 import re
-from urlparse import urlparse
+
+try:
+    from urllib.parse import urlparse
+except ImportError:
+    from urlparse import urlparse
 
 from demands import JSONServiceClient, HTTPServiceClient
 from django.core.management import BaseCommand, CommandError
