@@ -1,6 +1,8 @@
 import os
 import re
 
+from django.utils.six.moves import input
+
 try:
     from urllib.parse import urlparse
 except ImportError:
@@ -113,6 +115,12 @@ class Command(BaseCommand):
             help=('Filter for created_at until '
                   '(required YYYY-MM-DD HH:MM:SS)'))
         parser.add_argument(
+            '--dry-run', action='store_true', default=False,
+            help='Do a dry-run, do not actually dispatch the tasks.')
+        parser.add_argument(
+            '--confirm', action='store_true', default=False,
+            help='Agree to everything, I know what I am doing.')
+        parser.add_argument(
             'schedule', type=get_schedule,
             help=('The schedule to run deliver_tasks for. '
                   'The format is <definition>:<celery_definition_lookup_id>. '
@@ -134,6 +142,7 @@ class Command(BaseCommand):
         message_sender_url = options['message_sender_url']
         since = options['since']
         until = options['until']
+        dry_run = options['dry_run']
 
         if not since:
             raise CommandError('--since is a required parameter')
@@ -151,6 +160,24 @@ class Command(BaseCommand):
         message_sender_client = MessageSenderApiClient(
             message_sender_token, message_sender_url)
 
+        def confirm(prompt):
+            if options['confirm']:
+                return True
+            try:
+                return input(
+                    "%s [y/n] > " % (prompt,)).lower() == "y"
+            except KeyboardInterrupt:
+                raise CommandError("Please confirm the question.")
+
+        msg = ("You are about to trigger a stage based messaging send for %s "
+               "subscriptions. Are you sure you want to be doing this?" % (
+                self.style.NOTICE(str(schedules.count()))
+               ))
+
+        if not confirm(msg):
+            raise CommandError(
+                'Please confirm as you need to know what you are doing.')
+
         for schedule in schedules.iterator():
             sbm_api_url, subscription_uuid = self.parse_sbm_api_url(
                 schedule.endpoint)
@@ -166,13 +193,16 @@ class Command(BaseCommand):
                     'before': until.isoformat(),
                     'after': since.isoformat(),
                 })
-                # get_outbounds apparently can return `None`
-                if outbounds:
-                    any_outbounds.extend(outbounds)
+                any_outbounds.extend(outbounds)
 
             if any_outbounds:
                 continue
-            self.stdout.write('need to resend schedule: %s' % (schedule,))
+
+            if dry_run:
+                self.stdout.write('Dry run for %s' % (schedule,))
+            else:
+                self.stdout.write('%s' % (schedule,))
+                schedule.dispatch_deliver_task()
 
     def get_addresses(self, identity, default_addr_type):
         details = identity.get('details', {})

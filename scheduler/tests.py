@@ -796,88 +796,71 @@ class TestTriggerDeliverTasks(TestCase):
             'args': '["hello world"]',
         })
 
+    def mount_subscription(self, subscription_id, msisdns, identity_id=None):
+        identity_id = identity_id or ('identity-for-%s' % (subscription_id,))
+        responses.add(
+            responses.GET,
+            'http://sbm.example.org/api/v1/subscriptions/%s/' % (
+                subscription_id,),
+            status=200, json={
+                'identity': identity_id,
+            })
+
+        addresses = [(msisdns[0], {'default': True})]
+        for msisdn in msisdns[1:]:
+            addresses.append((msisdn, {}))
+
+        responses.add(
+            responses.GET,
+            'http://idstore.example.org/api/v1/identities/%s/' % (
+                identity_id,),
+            status=200, json={
+                'details': {
+                    'addresses': {
+                        'msisdn': dict(addresses)
+                    },
+                    'default_addr_type': 'msisdn',
+                }
+            })
+
+    def mount_outbound(self, msisdn, since, until, outbound_count=0):
+        responses.add(
+            responses.GET,
+            'http://sender.example.org/api/v1/outbound/?%s' % (urlencode({
+                'to_addr': msisdn,
+                'after': since.isoformat(),
+                'before': until.isoformat(),
+            }),),
+            status=200, body=json.dumps([{
+                "to_addr": msisdn,
+                "content": counter,
+            } for counter in range(outbound_count)]),
+            match_querystring=True)
+
+    def mount_sbm_send(self, subscription_id):
+        responses.add(
+            responses.POST,
+            'http://sbm.example.org/api/v1/subscriptions/%s/send' % (
+                subscription_id,),
+            status=200, body='{}')
+
+    def assertSBMSend(self, subscription_id):
+        sbm_url = 'http://sbm.example.org/api/v1/subscriptions/%s/send' % (
+            subscription_id,)
+        for call in responses.calls:
+            request = call.request
+            if request.url == sbm_url:
+                return True
+        return False
+
+    def assertNotSBMSend(self, subscription_id):
+        return not self.assertSBMSend(subscription_id)
+
     @responses.activate
     def test_deliver_tasks_interval(self):
 
         since = timezone.now() - timedelta(days=1)
         until = timezone.now() + timedelta(days=1)
-
-        responses.add(
-            responses.GET,
-            'http://sbm.example.org/api/v1/subscriptions/subscription-uuid-1/',
-            status=200, json={
-                'identity': 'id-uuid-1',
-            })
-
-        responses.add(
-            responses.GET,
-            'http://sbm.example.org/api/v1/subscriptions/subscription-uuid-2/',
-            status=200, json={
-                'identity': 'id-uuid-2',
-            })
-
-        responses.add(
-            responses.GET,
-            'http://idstore.example.org/api/v1/identities/id-uuid-1/',
-            status=200, json={
-                'details': {
-                    'addresses': {
-                        'msisdn': {
-                            '+27000000000': {
-                                'default': True
-                            },
-                            '+27111111111': {},
-                        }
-                    },
-                    'default_addr_type': 'msisdn',
-                }
-            })
-
-        responses.add(
-            responses.GET,
-            'http://idstore.example.org/api/v1/identities/id-uuid-2/',
-            status=200, json={
-                'details': {
-                    'addresses': {
-                        'msisdn': {
-                            '+27222222222': {
-                                'default': True
-                            }
-                        }
-                    },
-                    'default_addr_type': 'msisdn',
-                }
-            })
-
-        responses.add(
-            responses.GET,
-            'http://sender.example.org/api/v1/outbound/?%s' % (urlencode({
-                'to_addr': '+27000000000',
-                'after': since.isoformat(),
-                'before': until.isoformat(),
-            }),),
-            status=200, json=[{'some': 'sent message'}],
-            match_querystring=True)
-
-        responses.add(
-            responses.GET,
-            'http://sender.example.org/api/v1/outbound/?%s' % (urlencode({
-                'to_addr': '+27111111111',
-                'after': since.isoformat(),
-                'before': until.isoformat(),
-            }),),
-            status=200, json=[],
-            match_querystring=True)
-
-        responses.add(
-            responses.GET,
-            'http://sender.example.org/api/v1/outbound/?%s' % (urlencode({
-                'to_addr': '+27222222222',
-                'after': since.isoformat(),
-                'before': until.isoformat(),
-            }),),
-            status=200, json=[],
-            match_querystring=True)
 
         stdout = StringIO()
         stderr = StringIO()
@@ -890,6 +873,13 @@ class TestTriggerDeliverTasks(TestCase):
             auth_token='sbm_token',
             payload={})
 
+        self.mount_subscription(
+            'subscription-uuid-1', ['+27000000000', '+27111111111'])
+        self.mount_outbound(
+            '+27000000000', since=since, until=until, outbound_count=1)
+        self.mount_outbound(
+            '+27111111111', since=since, until=until, outbound_count=0)
+
         resend = Schedule.objects.create(
             enabled=True,
             celery_interval_definition=self.interval_schedule,
@@ -897,6 +887,12 @@ class TestTriggerDeliverTasks(TestCase):
                       '/subscription-uuid-2/send'),
             auth_token='sbm_token',
             payload={})
+
+        self.mount_subscription(
+            'subscription-uuid-2', ['+27222222222'])
+        self.mount_outbound(
+            '+27222222222', since=since, until=until, outbound_count=0)
+        self.mount_sbm_send('subscription-uuid-2')
 
         call_command(
             'trigger_deliver_tasks',
@@ -906,9 +902,50 @@ class TestTriggerDeliverTasks(TestCase):
             '--message-sender-url', 'http://sender.example.org/api/v1',
             '--since', since.isoformat(),
             '--until', until.isoformat(),
+            '--confirm',
             'interval:%s' % (self.interval_schedule.pk,),
             stdout=stdout, stderr=stderr)
 
+        self.assertNotSBMSend('subscription-uuid-1')
+        self.assertSBMSend('subscription-uuid-2')
+        self.assertEqual(stdout.getvalue().strip(), str(resend))
+
+    @responses.activate
+    def test_deliver_tasks_dry_run(self):
+
+        since = timezone.now() - timedelta(days=1)
+        until = timezone.now() + timedelta(days=1)
+
+        stdout = StringIO()
+        stderr = StringIO()
+
+        resend = Schedule.objects.create(
+            enabled=True,
+            celery_interval_definition=self.interval_schedule,
+            endpoint=('http://sbm.example.org/api/v1/subscriptions'
+                      '/subscription-uuid/send'),
+            auth_token='sbm_token',
+            payload={})
+
+        self.mount_subscription(
+            'subscription-uuid', ['+27222222222'])
+        self.mount_outbound(
+            '+27222222222', since=since, until=until, outbound_count=0)
+
+        call_command(
+            'trigger_deliver_tasks',
+            '--identity-store-token', 'token',
+            '--identity-store-url', 'http://idstore.example.org/api/v1',
+            '--message-sender-token', 'token',
+            '--message-sender-url', 'http://sender.example.org/api/v1',
+            '--since', since.isoformat(),
+            '--until', until.isoformat(),
+            '--confirm',
+            '--dry-run',
+            'interval:%s' % (self.interval_schedule.pk,),
+            stdout=stdout, stderr=stderr)
+
+        self.assertNotSBMSend('subscription-uuid')
         self.assertEqual(
             stdout.getvalue().strip(),
-            'need to resend schedule: %s' % (resend,))
+            'Dry run for %s' % (str(resend),))
