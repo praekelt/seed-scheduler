@@ -844,7 +844,7 @@ class TestTriggerDeliverTasks(TestCase):
                 subscription_id,),
             status=200, body='{}')
 
-    def assertSBMSend(self, subscription_id):
+    def sbm_send_happened(self, subscription_id):
         sbm_url = 'http://sbm.example.org/api/v1/subscriptions/%s/send' % (
             subscription_id,)
         for call in responses.calls:
@@ -853,8 +853,17 @@ class TestTriggerDeliverTasks(TestCase):
                 return True
         return False
 
+    def assertSBMSend(self, subscription_id):
+        self.assertTrue(self.sbm_send_happened(subscription_id),
+                        'Expected SBM to send for %s but didn\'t.' % (
+                            subscription_id,
+                        ))
+
     def assertNotSBMSend(self, subscription_id):
-        return not self.assertSBMSend(subscription_id)
+        self.assertFalse(self.sbm_send_happened(subscription_id),
+                         'Expected SBM to not send for %s but did.' % (
+                            subscription_id,
+                         ))
 
     @responses.activate
     def test_deliver_tasks_interval(self):
