@@ -109,6 +109,23 @@ class Schedule(models.Model):
             }
         }
 
+    def dispatch_deliver_task(self):
+        from .tasks import DeliverTask
+        if self.frequency is None:
+            self.triggered += 1
+            self.save()
+            return DeliverTask.apply_async(
+                kwargs={"schedule_id": str(self.id)})
+
+        elif self.triggered < self.frequency:
+            self.triggered += 1
+            if self.triggered == self.frequency:
+                # schedule must have hit it's limit
+                self.enabled = False
+            self.save()
+            return DeliverTask.apply_async(
+                kwargs={"schedule_id": str(self.id)})
+
     def __str__(self):  # __unicode__ on Python 2
         return str(self.id)
 
