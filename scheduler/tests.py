@@ -1,15 +1,20 @@
 import json
 import responses
+from django.utils.six import StringIO
+from datetime import timedelta
 
 try:
-    from urllib.parse import urlparse
+    from urllib.parse import urlparse, urlencode
 except ImportError:
     from urlparse import urlparse
+    from urllib import urlencode
 
 from django.contrib.auth.models import User
 from django.test import TestCase
 from django.conf import settings
 from django.db.models.signals import post_save
+from django.core.management import call_command
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 from rest_framework.authtoken.models import Token
@@ -20,6 +25,10 @@ from go_http.metrics import MetricsApiClient
 from .models import Schedule, fire_metrics_if_new
 from .tasks import deliver_task, queue_tasks, fire_metric
 from . import tasks
+
+from djcelery.models import PeriodicTask, CrontabSchedule, IntervalSchedule
+
+from seed_scheduler import celery_app
 
 
 class RecordingAdapter(TestAdapter):
@@ -713,3 +722,239 @@ class TestHealthcheckAPI(AuthenticatedAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["up"], True)
         self.assertEqual(response.data["result"]["database"], "Accessible")
+
+
+@celery_app.task
+def noop(argument):
+    return argument
+
+
+class TestTriggerPeriodicTask(TestCase):
+
+    timeout = 1
+
+    def test_trigger_periodic_task(self):
+        cs = CrontabSchedule.objects.create(**{
+            "minute": '*',
+            "hour": '*',
+            "day_of_week": '*',
+            "day_of_month": '*',
+            "month_of_year": '*',
+        })
+
+        pt = PeriodicTask.objects.create(**{
+            "name": "noop task",
+            "task": "scheduler.tests.noop",
+            "crontab": cs,
+            "enabled": True,
+            "args": '["hello world"]',
+        })
+        stdout = StringIO()
+        stderr = StringIO()
+        self.assertFalse(pt.last_run_at)
+        call_command('trigger_periodic_task', str(pt.pk),
+                     '--confirm',
+                     stdout=stdout, stderr=stderr)
+        self.assertEqual(stdout.getvalue().strip(), 'hello world')
+        pt_after_run = PeriodicTask.objects.get(pk=pt.pk)
+        self.assertTrue(pt_after_run.last_run_at)
+
+
+class TestTriggerDeliverTasks(TestCase):
+
+    timeout = 1
+
+    def setUp(self):
+        post_save.disconnect(fire_metrics_if_new, sender=Schedule)
+        self.session = TestSession()
+        self.crontab_schedule = CrontabSchedule.objects.create(**{
+            "minute": '*',
+            "hour": '*',
+            "day_of_week": '*',
+            "day_of_month": '*',
+            "month_of_year": '*',
+        })
+
+        self.periodic_crontab_task = PeriodicTask.objects.create(**{
+            "name": "noop crontab task",
+            "task": "scheduler.tests.noop",
+            "crontab": self.crontab_schedule,
+            "enabled": True,
+            "args": '["hello world"]',
+        })
+
+        self.interval_schedule = IntervalSchedule.objects.create(**{
+            'every': 5,
+            'period': 'minutes',
+        })
+
+        self.periodic_interval_task = PeriodicTask.objects.create(**{
+            'name': 'noop interval task',
+            'task': 'scheduler.tests.noop',
+            'interval': self.interval_schedule,
+            'enabled': True,
+            'args': '["hello world"]',
+        })
+
+    def mount_subscription(self, subscription_id, msisdns, identity_id=None):
+        identity_id = identity_id or ('identity-for-%s' % (subscription_id,))
+        responses.add(
+            responses.GET,
+            'http://sbm.example.org/api/v1/subscriptions/%s/' % (
+                subscription_id,),
+            status=200, json={
+                'identity': identity_id,
+            })
+
+        addresses = [(msisdns[0], {'default': True})]
+        for msisdn in msisdns[1:]:
+            addresses.append((msisdn, {}))
+
+        responses.add(
+            responses.GET,
+            'http://idstore.example.org/api/v1/identities/%s/' % (
+                identity_id,),
+            status=200, json={
+                'details': {
+                    'addresses': {
+                        'msisdn': dict(addresses)
+                    },
+                    'default_addr_type': 'msisdn',
+                }
+            })
+
+    def mount_outbound(self, msisdn, since, until, outbound_count=0):
+        responses.add(
+            responses.GET,
+            'http://sender.example.org/api/v1/outbound/?%s' % (urlencode({
+                'to_addr': msisdn,
+                'after': since.isoformat(),
+                'before': until.isoformat(),
+            }),),
+            status=200, body=json.dumps([{
+                "to_addr": msisdn,
+                "content": counter,
+            } for counter in range(outbound_count)]),
+            match_querystring=True)
+
+    def mount_sbm_send(self, subscription_id):
+        responses.add(
+            responses.POST,
+            'http://sbm.example.org/api/v1/subscriptions/%s/send' % (
+                subscription_id,),
+            status=200, body='{}')
+
+    def sbm_send_happened(self, subscription_id):
+        sbm_url = 'http://sbm.example.org/api/v1/subscriptions/%s/send' % (
+            subscription_id,)
+        for call in responses.calls:
+            request = call.request
+            if request.url == sbm_url:
+                return True
+        return False
+
+    def assertSBMSend(self, subscription_id):
+        self.assertTrue(self.sbm_send_happened(subscription_id),
+                        'Expected SBM to send for %s but didn\'t.' % (
+                            subscription_id,
+                        ))
+
+    def assertNotSBMSend(self, subscription_id):
+        self.assertFalse(self.sbm_send_happened(subscription_id),
+                         'Expected SBM to not send for %s but did.' % (
+                            subscription_id,
+                         ))
+
+    @responses.activate
+    def test_deliver_tasks_interval(self):
+
+        since = timezone.now() - timedelta(days=1)
+        until = timezone.now() + timedelta(days=1)
+
+        stdout = StringIO()
+        stderr = StringIO()
+
+        Schedule.objects.create(
+            enabled=True,
+            celery_interval_definition=self.interval_schedule,
+            endpoint=('http://sbm.example.org/api/v1/subscriptions'
+                      '/subscription-uuid-1/send'),
+            auth_token='sbm_token',
+            payload={})
+
+        self.mount_subscription(
+            'subscription-uuid-1', ['+27000000000', '+27111111111'])
+        self.mount_outbound(
+            '+27000000000', since=since, until=until, outbound_count=1)
+        self.mount_outbound(
+            '+27111111111', since=since, until=until, outbound_count=0)
+
+        resend = Schedule.objects.create(
+            enabled=True,
+            celery_interval_definition=self.interval_schedule,
+            endpoint=('http://sbm.example.org/api/v1/subscriptions'
+                      '/subscription-uuid-2/send'),
+            auth_token='sbm_token',
+            payload={})
+
+        self.mount_subscription(
+            'subscription-uuid-2', ['+27222222222'])
+        self.mount_outbound(
+            '+27222222222', since=since, until=until, outbound_count=0)
+        self.mount_sbm_send('subscription-uuid-2')
+
+        call_command(
+            'trigger_deliver_tasks',
+            '--identity-store-token', 'token',
+            '--identity-store-url', 'http://idstore.example.org/api/v1',
+            '--message-sender-token', 'token',
+            '--message-sender-url', 'http://sender.example.org/api/v1',
+            '--since', since.isoformat(),
+            '--until', until.isoformat(),
+            '--confirm',
+            'interval:%s' % (self.interval_schedule.pk,),
+            stdout=stdout, stderr=stderr)
+
+        self.assertNotSBMSend('subscription-uuid-1')
+        self.assertSBMSend('subscription-uuid-2')
+        self.assertEqual(stdout.getvalue().strip(), str(resend))
+
+    @responses.activate
+    def test_deliver_tasks_dry_run(self):
+
+        since = timezone.now() - timedelta(days=1)
+        until = timezone.now() + timedelta(days=1)
+
+        stdout = StringIO()
+        stderr = StringIO()
+
+        resend = Schedule.objects.create(
+            enabled=True,
+            celery_interval_definition=self.interval_schedule,
+            endpoint=('http://sbm.example.org/api/v1/subscriptions'
+                      '/subscription-uuid/send'),
+            auth_token='sbm_token',
+            payload={})
+
+        self.mount_subscription(
+            'subscription-uuid', ['+27222222222'])
+        self.mount_outbound(
+            '+27222222222', since=since, until=until, outbound_count=0)
+
+        call_command(
+            'trigger_deliver_tasks',
+            '--identity-store-token', 'token',
+            '--identity-store-url', 'http://idstore.example.org/api/v1',
+            '--message-sender-token', 'token',
+            '--message-sender-url', 'http://sender.example.org/api/v1',
+            '--since', since.isoformat(),
+            '--until', until.isoformat(),
+            '--confirm',
+            '--dry-run',
+            'interval:%s' % (self.interval_schedule.pk,),
+            stdout=stdout, stderr=stderr)
+
+        self.assertNotSBMSend('subscription-uuid')
+        self.assertEqual(
+            stdout.getvalue().strip(),
+            'Dry run for %s' % (str(resend),))
