@@ -12,3 +12,11 @@ install:
 script:
   - flake8 .
   - py.test --ds=seed_scheduler.testsettings */tests.py
+deploy:
+  provider: pypi
+  user: praekelt.org
+  password:
+    secure: D6V0wo5zWhQJvoK6xL3gTZidVt2u36SerwbGObaLeH6Td341QQUEZsl6NF4+yR3KkjCyLgHaQHNm/y2csDl034r+ET6rABy8EnAf9tLfzKBkGPAKGoXKS3I/1uUx/SKniBZQxxycfU99rSQ3egbrdd2Ixb1qF84hv73QL/WUbAHjHaCnCbpyB4gPJNG7h1awJOoFA8r8FjhXYiYT4bjuMOLBHGsxbjSNOPJIapGrv27EPVxFfdnQBNUWrgbKNhMsKM4vp2/PvMNdmGb+Z1H1NqGTYOgN2swjlsSv/GVMSUW9tfGsGXfLmenhBOOTx3/DctADbCN85K1feFaJwCaM1PYvvFuLBKWAQ7t3fC+2ds9bwJwjx5HHoynz7cnGWN1gTQSNMrpDfzsMYMNgTe0peDUt9ASC+nk71zE5DXdp/dbfTGLiUDaPb6KFK1xlCRcUjfSQAMXD9YBAwL+Z77P6UaQeNjSOH8QG+LpyI2l3HzYWgF9vH9MnX5Wsm+TPbfmL93CZ8sLUDgxfb5x6oRXhLiV9TNflX7HUCj59UGVk5YervnpBVAxiAWxq8z7gxU4yjLXsorYCe2Ct1YFdz6NB3xmpUkaNrN1AFEgdXsJjarUEcIdFf3jeKCg0GxtnOiyb2e79EA1dcKwYkOKEjzneCjPRRI3EhhwjJfcsL6pfXLA=
+  distributions: sdist bdist_wheel
+  on:
+    tags: true
