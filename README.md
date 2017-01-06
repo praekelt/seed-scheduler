@@ -1,2 +1,0 @@
-# seed-scheduler
-Seed Scheduler
