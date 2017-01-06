@@ -67,6 +67,7 @@ class DeliverTask(Task):
 
         return True
 
+
 deliver_task = DeliverTask()
 
 
@@ -99,6 +100,7 @@ class QueueTasks(Task):
 
         return "Queued <%s> Tasks" % (queued, )
 
+
 queue_tasks = QueueTasks()
 
 
@@ -124,5 +126,6 @@ class FireMetric(Task):
         metric_client.fire(metric)
         return "Fired metric <%s> with value <%s>" % (
             metric_name, metric_value)
+
 
 fire_metric = FireMetric()

@@ -12,4 +12,5 @@ class ScheduleAdmin(admin.ModelAdmin):
         'created_at', 'updated_at', )
     search_fields = ['id', 'endpoint']
 
+
 admin.site.register(Schedule, ScheduleAdmin)
