@@ -550,6 +550,50 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
         self.assertEqual(responses.calls[0].request.url,
                          "http://example.com/trigger/")
 
+    @responses.activate
+    def test_queue_tasks_repeat(self):
+        # Tests crontab based task runs
+        # Setup
+        expected_body = {
+            "run": 1
+        }
+        responses.add(
+            responses.POST,
+            "http://example.com/trigger/",
+            json.dumps(expected_body),
+            status=200, content_type='application/json')
+
+        schedule_data = {
+            "frequency": 2,
+            "cron_definition": "25 * * * *",
+            "interval_definition": None,
+            "endpoint": "http://example.com/trigger/",
+            "payload": {"run": 1}
+        }
+        schedule = Schedule.objects.create(**schedule_data)
+
+        # Execute
+        result = queue_tasks.apply_async(kwargs={
+            "schedule_type": "crontab",
+            "lookup_id": schedule.celery_cron_definition.id})
+
+        # Check
+        self.assertEqual(result.get(), "Queued <1> Tasks")
+        s = Schedule.objects.get(id=schedule.id)
+        self.assertEqual(s.triggered, 1)
+        self.assertEqual(responses.calls[0].request.url,
+                         "http://example.com/trigger/")
+
+        # Try run again
+        result = queue_tasks.apply_async(kwargs={
+            "schedule_type": "crontab",
+            "lookup_id": schedule.celery_cron_definition.id})
+
+        # Check
+        self.assertIn("Aborted Queuing", result.get())
+        s = Schedule.objects.get(id=schedule.id)
+        self.assertEqual(s.triggered, 1)
+
 
 class TestMetricsAPI(AuthenticatedAPITestCase):
 
