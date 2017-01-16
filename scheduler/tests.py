@@ -1,5 +1,6 @@
 import json
 import responses
+from uuid import uuid4
 from django.utils.six import StringIO
 from datetime import timedelta
 
@@ -22,7 +23,7 @@ from rest_hooks.models import Hook
 from requests_testadapter import TestAdapter, TestSession
 from go_http.metrics import MetricsApiClient
 
-from .models import Schedule, fire_metrics_if_new
+from .models import Schedule, fire_metrics_if_new, QueueTaskRun
 from .tasks import deliver_task, queue_tasks, fire_metric
 from . import tasks
 
@@ -593,6 +594,50 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
         self.assertIn("Aborted Queuing", result.get())
         s = Schedule.objects.get(id=schedule.id)
         self.assertEqual(s.triggered, 1)
+        self.assertEqual(QueueTaskRun.objects.all().count(), 1)
+
+    @responses.activate
+    def test_queue_tasks_repeat_after_interval(self):
+        expected_body = {
+            "run": 1
+        }
+        responses.add(
+            responses.POST,
+            "http://example.com/trigger/",
+            json.dumps(expected_body),
+            status=200, content_type='application/json')
+
+        schedule_data = {
+            "frequency": 2,
+            "cron_definition": "25 * * * *",
+            "interval_definition": None,
+            "endpoint": "http://example.com/trigger/",
+            "payload": {"run": 1}
+        }
+        schedule = Schedule.objects.create(**schedule_data)
+
+        # Create a previous run
+        d1 = timezone.now()
+        d1 = d1.replace(minute=20)
+        QueueTaskRun.objects.create(
+            celery_cron_definition=schedule.celery_cron_definition,
+            task_id=uuid4(),
+            started_at=d1 - timedelta(hours=1),
+            completed_at=d1 + timedelta(minutes=5)
+        )
+
+        # Execute
+        result = queue_tasks.apply_async(kwargs={
+            "schedule_type": "crontab",
+            "lookup_id": schedule.celery_cron_definition.id})
+
+        # Check
+        self.assertEqual(result.get(), "Queued <1> Tasks")
+        s = Schedule.objects.get(id=schedule.id)
+        self.assertEqual(s.triggered, 1)
+        self.assertEqual(responses.calls[0].request.url,
+                         "http://example.com/trigger/")
+        self.assertEqual(QueueTaskRun.objects.all().count(), 2)
 
 
 class TestMetricsAPI(AuthenticatedAPITestCase):
