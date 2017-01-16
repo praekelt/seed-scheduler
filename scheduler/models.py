@@ -186,3 +186,23 @@ def fire_metrics_if_new(sender, instance, created, **kwargs):
             "metric_name": 'schedules.created.sum',
             "metric_value": 1.0
         })
+
+
+@python_2_unicode_compatible
+class QueueTaskRun(models.Model):
+    task_id = models.UUIDField()
+    celery_cron_definition = models.ForeignKey(
+        CrontabSchedule,
+        on_delete=models.CASCADE,
+        null=True, blank=True
+    )
+    celery_interval_definition = models.ForeignKey(
+        IntervalSchedule,
+        on_delete=models.CASCADE,
+        null=True, blank=True
+    )
+    started_at = models.DateTimeField()
+    completed_at = models.DateTimeField(null=True)
+
+    def __str__(self):  # __unicode__ on Python 2
+        return str(self.id)

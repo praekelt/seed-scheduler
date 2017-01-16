@@ -4,9 +4,11 @@ import requests
 from celery.task import Task
 from celery.utils.log import get_task_logger
 from django.conf import settings
+from django.utils.timezone import now
+from djcelery.models import CrontabSchedule, IntervalSchedule
 from go_http.metrics import MetricsApiClient
 
-from .models import Schedule
+from .models import Schedule, QueueTaskRun
 
 
 logger = get_task_logger(__name__)
@@ -85,12 +87,42 @@ class QueueTasks(Task):
         l = self.get_logger(**kwargs)
         l.info("Queuing <%s> <%s>" % (schedule_type, lookup_id))
 
+        task_run = QueueTaskRun()
+        task_run.task_id = self.request.id
+        task_run.started_at = now()
+        tr_qs = QueueTaskRun.objects
+
         # Load the schedule active items
         schedules = Schedule.objects.filter(enabled=True)
         if schedule_type == "crontab":
             schedules = schedules.filter(celery_cron_definition=lookup_id)
+            tr_qs = tr_qs.filter(celery_cron_definition=lookup_id)
+            scheduler_type = CrontabSchedule
+            task_run.celery_cron_definition_id = lookup_id
         elif schedule_type == "interval":
             schedules = schedules.filter(celery_interval_definition=lookup_id)
+            tr_qs = tr_qs.filter(celery_interval_definition=lookup_id)
+            scheduler_type = IntervalSchedule
+            task_run.celery_interval_definition_id = lookup_id
+
+        # Confirm that this task should run now based on last run time.
+        try:
+            last_task_run = tr_qs.latest('started_at')
+        except QueueTaskRun.DoesNotExist:
+            # No previous run so it is safe to continue.
+            pass
+        else:
+            # This basicly replicates what celery beat is meant to do, but
+            # we can't trust celery beat and django-celery to always accurately
+            # update their own last run time.
+            sched = scheduler_type.objects.get(id=lookup_id)
+            due, due_next = sched.schedule.is_due(last_task_run.started_at)
+            if not due:
+                return ("Aborted Queuing <%s> <%s> due to last task run (%s) "
+                        "at %s" % (schedule_type, lookup_id, last_task_run.id,
+                                   last_task_run.started_at))
+
+        task_run.save()
         # create tasks for each active schedule
         l.info("Filtered schedule count: <%s>" % schedules.count())
         queued = 0
@@ -98,6 +130,8 @@ class QueueTasks(Task):
             schedule.dispatch_deliver_task()
             queued += 1
 
+        task_run.completed_at = now()
+        task_run.save()
         return "Queued <%s> Tasks" % (queued, )
 
 
@@ -115,7 +149,7 @@ class FireMetric(Task):
 
     """ Fires a metric using the MetricsApiClient
     """
-    name = "seed_identity_store.identities.tasks.fire_metric"
+    name = "seed_scheduler.scheduler.tasks.fire_metric"
 
     def run(self, metric_name, metric_value, session=None, **kwargs):
         metric_value = float(metric_value)

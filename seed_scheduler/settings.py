@@ -185,13 +185,13 @@ CELERY_ROUTES = {
     'scheduler.tasks.DeliverHook': {
         'queue': 'priority',
     },
-    'scheduler.tasks.queue_tasks': {
+    'seed_scheduler.scheduler.tasks.queue_tasks': {
         'queue': 'priority',
     },
-    'scheduler.tasks.deliver_task': {
+    'seed_scheduler.scheduler.tasks.deliver_task': {
         'queue': 'lowpriority',
     },
-    'scheduler.tasks.fire_metric': {
+    'seed_scheduler.scheduler.tasks.fire_metric': {
         'queue': 'metrics',
     },
 }
