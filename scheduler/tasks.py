@@ -5,11 +5,11 @@ from uuid import uuid4
 from celery.task import Task
 from celery.utils.log import get_task_logger
 from django.conf import settings
+from django.db import connection, transaction
 from django.utils.timezone import now
 from djcelery.models import CrontabSchedule, IntervalSchedule
 from go_http.metrics import MetricsApiClient
 
-from .cursors import server_side_cursors
 from .models import Schedule, QueueTaskRun
 
 
@@ -96,14 +96,14 @@ class QueueTasks(Task):
         tr_qs = QueueTaskRun.objects
 
         # Load the schedule active items
-        schedules = Schedule.objects.filter(enabled=True)
+        query = "SELECT id FROM scheduler_schedule WHERE enabled = 't'"
         if schedule_type == "crontab":
-            schedules = schedules.filter(celery_cron_definition=lookup_id)
+            query = query + 'AND celery_cron_definition_id = %(lookup_id)s'
             tr_qs = tr_qs.filter(celery_cron_definition=lookup_id)
             scheduler_type = CrontabSchedule
             task_run.celery_cron_definition_id = lookup_id
         elif schedule_type == "interval":
-            schedules = schedules.filter(celery_interval_definition=lookup_id)
+            query = query + 'AND celery_interval_definition_id = %(lookup_id)s'
             tr_qs = tr_qs.filter(celery_interval_definition=lookup_id)
             scheduler_type = IntervalSchedule
             task_run.celery_interval_definition_id = lookup_id
@@ -127,14 +127,21 @@ class QueueTasks(Task):
 
         task_run.save()
         # create tasks for each active schedule
-        l.info("Filtered schedule count: <%s>" % schedules.count())
         queued = 0
-        qs = schedules.values('id')
-        with server_side_cursors(qs, itersize=10000):
-            for schedule in qs.iterator():
-                DeliverTask.apply_async(
-                    kwargs={"schedule_id": str(schedule['id'])})
-                queued += 1
+        with transaction.atomic(), connection.cursor() as cur:
+            cur.execute(
+                "DECLARE mycursor CURSOR FOR %s" % query,
+                {'lookup_id': lookup_id}
+            )
+            while True:
+                cur.execute("FETCH 10000 FROM mycursor")
+                chunk = cur.fetchall()
+                if not chunk:
+                    break
+                for row in chunk:
+                    DeliverTask.apply_async(
+                        kwargs={"schedule_id": str(row[0])})
+                    queued += 1
 
         task_run.completed_at = now()
         task_run.save()
