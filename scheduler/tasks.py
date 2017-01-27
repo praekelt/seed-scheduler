@@ -129,12 +129,16 @@ class QueueTasks(Task):
         # create tasks for each active schedule
         queued = 0
         with transaction.atomic(), connection.cursor() as cur:
+            cursor_name = '_cur_queue_tasks_{uuid}'.format(uuid=uuid4().hex)
             cur.execute(
-                "DECLARE mycursor CURSOR FOR %s" % query,
+                "DECLARE {cursor_name} CURSOR FOR {query}".format(
+                    cursor_name=cursor_name,
+                    query=query
+                ),
                 {'lookup_id': lookup_id}
             )
             while True:
-                cur.execute("FETCH 10000 FROM mycursor")
+                cur.execute("FETCH 10000 FROM {0}".format(cursor_name))
                 chunk = cur.fetchall()
                 if not chunk:
                     break
