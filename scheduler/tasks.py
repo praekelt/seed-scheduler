@@ -129,6 +129,12 @@ class QueueTasks(Task):
         # create tasks for each active schedule
         queued = 0
         with transaction.atomic(), connection.cursor() as cur:
+            # A named cursor is declared here to make psycopg2 use a server
+            # side cursor. The SSC prevents the entire result set from being
+            # loaded into memory.
+            # NOTE: this can be replaced with just a call to a queryset's
+            # iterator() method in Django 1.11 as that directly supports using
+            # a SSC.
             cursor_name = '_cur_queue_tasks_{uuid}'.format(uuid=uuid4().hex)
             cur.execute(
                 "DECLARE {cursor_name} CURSOR FOR {query}".format(
