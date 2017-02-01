@@ -1,9 +1,11 @@
 import json
 import requests
+from uuid import uuid4
 
 from celery.task import Task
 from celery.utils.log import get_task_logger
 from django.conf import settings
+from django.db import connection, transaction
 from django.utils.timezone import now
 from djcelery.models import CrontabSchedule, IntervalSchedule
 from go_http.metrics import MetricsApiClient
@@ -79,6 +81,7 @@ class QueueTasks(Task):
     Task to queue delivery of scheduled hooks
     """
     name = "seed_scheduler.scheduler.tasks.queue_tasks"
+    ignore_result = True
 
     def run(self, schedule_type, lookup_id, **kwargs):
         """
@@ -88,7 +91,7 @@ class QueueTasks(Task):
         l.info("Queuing <%s> <%s>" % (schedule_type, lookup_id))
 
         task_run = QueueTaskRun()
-        task_run.task_id = self.request.id
+        task_run.task_id = self.request.id or uuid4()
         task_run.started_at = now()
         tr_qs = QueueTaskRun.objects
 
@@ -124,11 +127,33 @@ class QueueTasks(Task):
 
         task_run.save()
         # create tasks for each active schedule
-        l.info("Filtered schedule count: <%s>" % schedules.count())
         queued = 0
-        for schedule in schedules.iterator():
-            schedule.dispatch_deliver_task()
-            queued += 1
+        schedules = schedules.values('id')
+        with transaction.atomic(), connection.cursor() as cur:
+            # A named cursor is declared here to make psycopg2 use a server
+            # side cursor. The SSC prevents the entire result set from being
+            # loaded into memory.
+            # NOTE: this can be replaced with just a call to a queryset's
+            # iterator() method in Django 1.11 as that directly supports using
+            # a SSC.
+            query = str(schedules.query)
+            cursor_name = '_cur_queue_tasks_{uuid}'.format(uuid=uuid4().hex)
+            cur.execute(
+                "DECLARE {cursor_name} CURSOR FOR {query}".format(
+                    cursor_name=cursor_name,
+                    query=query
+                ),
+                {'lookup_id': lookup_id}
+            )
+            while True:
+                cur.execute("FETCH 10000 FROM {0}".format(cursor_name))
+                chunk = cur.fetchall()
+                if not chunk:
+                    break
+                for row in chunk:
+                    DeliverTask.apply_async(
+                        kwargs={"schedule_id": str(row[0])})
+                    queued += 1
 
         task_run.completed_at = now()
         task_run.save()

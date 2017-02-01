@@ -210,7 +210,6 @@ class TestSchedudlerAppAPI(AuthenticatedAPITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         d = Schedule.objects.last()
         self.assertEqual(d.frequency, 2)
-        self.assertEqual(d.triggered, 0)
         self.assertEqual(d.interval_definition, "1 minutes")
         self.assertIsNotNone(d.celery_interval_definition)
         self.assertEqual(d.celery_interval_definition.every, 1)
@@ -378,8 +377,6 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
 
         # Check
         self.assertEqual(result.get(), "Queued <1> Tasks")
-        s = Schedule.objects.get(id=schedule.id)
-        self.assertEqual(s.triggered, 1)
         self.assertEqual(responses.calls[0].request.url,
                          "http://example.com/trigger/")
 
@@ -412,8 +409,6 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
 
         # Check
         self.assertEqual(result.get(), "Queued <1> Tasks")
-        s = Schedule.objects.get(id=schedule.id)
-        self.assertEqual(s.triggered, 1)
         self.assertEqual(responses.calls[0].request.url,
                          "http://example.com/trigger/")
 
@@ -437,7 +432,7 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
             "endpoint": "http://example.com/trigger/",
             "payload": {"run": 1}
         }
-        run = Schedule.objects.create(**schedule_data)
+        Schedule.objects.create(**schedule_data)
         schedule_data = {
             "frequency": 10,
             "cron_definition": "25 * * * *",
@@ -446,7 +441,6 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
             "payload": {"run": 1}
         }
         donotrun = Schedule.objects.create(**schedule_data)
-        donotrun.triggered = 10
         donotrun.enabled = False
         donotrun.save()
 
@@ -457,8 +451,6 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
 
         # Check
         self.assertEqual(result.get(), "Queued <1> Tasks")
-        s = Schedule.objects.get(id=run.id)
-        self.assertEqual(s.triggered, 1)
         self.assertEqual(responses.calls[0].request.url,
                          "http://example.com/trigger/")
 
@@ -487,7 +479,7 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
             "endpoint": "http://example.com/trigger/",
             "payload": {"run": 1}
         }
-        run = Schedule.objects.create(**schedule_data)
+        Schedule.objects.create(**schedule_data)
         schedule_data = {
             "frequency": None,
             "cron_definition": "25 * * * *",
@@ -505,50 +497,9 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
 
         # Check
         self.assertEqual(result.get(), "Queued <2> Tasks")
-        s1 = Schedule.objects.get(id=run.id)
-        self.assertEqual(s1.triggered, 1)
-        s2 = Schedule.objects.get(id=runnone.id)
-        self.assertEqual(s2.triggered, 1)
         self.assertEqual(responses.calls[0].request.url,
                          "http://example.com/runnone/")
         self.assertEqual(responses.calls[1].request.url,
-                         "http://example.com/trigger/")
-
-    @responses.activate
-    def test_queue_tasks_one_interval_disable(self):
-        # Tests does a final trigger now set to enabled = False
-        # Setup
-        expected_body = {
-            "run": 1
-        }
-        responses.add(
-            responses.POST,
-            "http://example.com/trigger/",
-            json.dumps(expected_body),
-            status=200, content_type='application/json')
-
-        schedule_data = {
-            "frequency": 10,
-            "cron_definition": None,
-            "interval_definition": "1 minutes",
-            "endpoint": "http://example.com/trigger/",
-            "payload": {"run": 1}
-        }
-        schedule = Schedule.objects.create(**schedule_data)
-        schedule.triggered = 9
-        schedule.save()
-
-        # Execute
-        result = queue_tasks.apply_async(kwargs={
-            "schedule_type": "interval",
-            "lookup_id": schedule.celery_interval_definition.id})
-
-        # Check
-        self.assertEqual(result.get(), "Queued <1> Tasks")
-        s = Schedule.objects.get(id=schedule.id)
-        self.assertEqual(s.triggered, 10)
-        self.assertEqual(s.enabled, False)
-        self.assertEqual(responses.calls[0].request.url,
                          "http://example.com/trigger/")
 
     @responses.activate
@@ -580,8 +531,6 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
 
         # Check
         self.assertEqual(result.get(), "Queued <1> Tasks")
-        s = Schedule.objects.get(id=schedule.id)
-        self.assertEqual(s.triggered, 1)
         self.assertEqual(responses.calls[0].request.url,
                          "http://example.com/trigger/")
 
@@ -592,8 +541,6 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
 
         # Check
         self.assertIn("Aborted Queuing", result.get())
-        s = Schedule.objects.get(id=schedule.id)
-        self.assertEqual(s.triggered, 1)
         self.assertEqual(QueueTaskRun.objects.all().count(), 1)
 
     @responses.activate
@@ -633,8 +580,6 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
 
         # Check
         self.assertEqual(result.get(), "Queued <1> Tasks")
-        s = Schedule.objects.get(id=schedule.id)
-        self.assertEqual(s.triggered, 1)
         self.assertEqual(responses.calls[0].request.url,
                          "http://example.com/trigger/")
         self.assertEqual(QueueTaskRun.objects.all().count(), 2)
