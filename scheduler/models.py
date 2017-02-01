@@ -47,7 +47,7 @@ class Schedule(models.Model):
 
     """
     Base model with all scheduled tasks
-    frequency: number of times task should run in total
+    frequency: number of times task should run in total (deprecated)
     cron_definition: cron syntax of schedule (i.e. 'm h d dM MY')
     interval_definition: integer and period
         (from: days, hours, minutes, seconds, microseconds) e.g. 1 minutes
@@ -56,6 +56,7 @@ class Schedule(models.Model):
     next_send_at: when the task is next expected to run (not guarenteed)
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # frequency and triggered are deprecated and will eventually be removed
     frequency = models.IntegerField(null=True, blank=True)
     triggered = models.IntegerField(null=False, blank=False, default=0)
     cron_definition = models.CharField(max_length=500,
@@ -108,23 +109,6 @@ class Schedule(models.Model):
                 'updated_at': self.updated_at.isoformat()
             }
         }
-
-    def dispatch_deliver_task(self):
-        from .tasks import DeliverTask
-        if self.frequency is None:
-            self.triggered += 1
-            self.save()
-            return DeliverTask.apply_async(
-                kwargs={"schedule_id": str(self.id)})
-
-        elif self.triggered < self.frequency:
-            self.triggered += 1
-            if self.triggered == self.frequency:
-                # schedule must have hit it's limit
-                self.enabled = False
-            self.save()
-            return DeliverTask.apply_async(
-                kwargs={"schedule_id": str(self.id)})
 
     def __str__(self):  # __unicode__ on Python 2
         return str(self.id)

@@ -13,6 +13,7 @@ from django.core.validators import URLValidator
 from django.utils.dateparse import parse_datetime
 
 from scheduler.models import Schedule
+from scheduler.tasks import DeliverTask
 
 
 def get_schedule(schedule_string):
@@ -175,7 +176,8 @@ class Command(BaseCommand):
                 self.stdout.write('Dry run for %s' % (schedule,))
             else:
                 self.stdout.write('%s' % (schedule,))
-                schedule.dispatch_deliver_task()
+                DeliverTask.apply_async(
+                    kwargs={"schedule_id": str(schedule.id)})
 
     def get_addresses(self, identity, default_addr_type):
         details = identity.get('details', {})

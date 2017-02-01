@@ -240,7 +240,7 @@ Schedules
 
     Creates a new Schedule.
 
-    :<json int frequency: an optional integer number of times a task should be run in total.
+    :<json int frequency: (Deprecated) an optional integer number of times a task should be run in total.
     :<json string endpoint: a URL to POST to when this schedule is run.
     :<json string cron_definition: A crontab definition of when to run this schedule.
     :<json string inteval_definition: An interval definition of when to run this schedule.
