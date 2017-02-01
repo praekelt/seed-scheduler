@@ -12,10 +12,10 @@ Fields
     A UUID 4 unique identifier for the record.
 
 **frequency**
-    An optional integer number of times a task should be run in total.
+    (Deprecated) An optional integer number of times a task should be run in total.
 
 **triggered**
-    An integer representing the number of times a task has been run.
+    (Deprecated) An integer representing the number of times a task has been run.
 
 **cron_definition**
     A character based representation of the schedule in cron format.
