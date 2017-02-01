@@ -96,14 +96,14 @@ class QueueTasks(Task):
         tr_qs = QueueTaskRun.objects
 
         # Load the schedule active items
-        query = "SELECT id FROM scheduler_schedule WHERE enabled = 't'"
+        schedules = Schedule.objects.filter(enabled=True)
         if schedule_type == "crontab":
-            query = query + 'AND celery_cron_definition_id = %(lookup_id)s'
+            schedules = schedules.filter(celery_cron_definition=lookup_id)
             tr_qs = tr_qs.filter(celery_cron_definition=lookup_id)
             scheduler_type = CrontabSchedule
             task_run.celery_cron_definition_id = lookup_id
         elif schedule_type == "interval":
-            query = query + 'AND celery_interval_definition_id = %(lookup_id)s'
+            schedules = schedules.filter(celery_interval_definition=lookup_id)
             tr_qs = tr_qs.filter(celery_interval_definition=lookup_id)
             scheduler_type = IntervalSchedule
             task_run.celery_interval_definition_id = lookup_id
@@ -128,6 +128,7 @@ class QueueTasks(Task):
         task_run.save()
         # create tasks for each active schedule
         queued = 0
+        schedules = schedules.values('id')
         with transaction.atomic(), connection.cursor() as cur:
             # A named cursor is declared here to make psycopg2 use a server
             # side cursor. The SSC prevents the entire result set from being
@@ -135,6 +136,7 @@ class QueueTasks(Task):
             # NOTE: this can be replaced with just a call to a queryset's
             # iterator() method in Django 1.11 as that directly supports using
             # a SSC.
+            query = str(schedules.query)
             cursor_name = '_cur_queue_tasks_{uuid}'.format(uuid=uuid4().hex)
             cur.execute(
                 "DECLARE {cursor_name} CURSOR FOR {query}".format(
