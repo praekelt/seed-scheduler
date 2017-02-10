@@ -80,14 +80,19 @@ class DeliverTask(Task):
             response.raise_for_status()
         except requests_exceptions.ConnectionError as exc:
             l.info('Connection Error to endpoint: %s' % schedule.endpoint)
+            fire_metric.delay('scheduler.deliver_task.connection_error.sum', 1)
             self.retry(exc=exc, countdown=retry_delay)
         except requests_exceptions.HTTPError as exc:
             # Recoverable HTTP errors: 500, 401
             l.info('Request failed due to status: %s' %
                    exc.response.status_code)
+            metric_name = ('scheduler.deliver_task.http_error.%s.sum' %
+                           exc.response.status_code)
+            fire_metric.delay(metric_name, 1)
             self.retry(exc=exc, countdown=retry_delay)
         except requests_exceptions.Timeout as exc:
             l.info('Request failed due to timeout')
+            fire_metric.delay('scheduler.deliver_task.timeout.sum', 1)
             self.retry(exc=exc, countdown=retry_delay)
 
         return True
