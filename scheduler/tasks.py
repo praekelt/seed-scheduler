@@ -74,7 +74,8 @@ class DeliverTask(Task):
             response = requests.post(
                 url=schedule.endpoint,
                 data=json.dumps(schedule.payload),
-                headers=headers
+                headers=headers,
+                timeout=settings.DEFAULT_REQUEST_TIMEOUT
             )
             # Expecting a 201, raise for errors.
             response.raise_for_status()

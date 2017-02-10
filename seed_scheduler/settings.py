@@ -214,3 +214,5 @@ djcelery.setup_loader()
 
 METRICS_URL = os.environ.get("METRICS_URL", None)
 METRICS_AUTH_TOKEN = os.environ.get("METRICS_AUTH_TOKEN", "REPLACEME")
+
+DEFAULT_REQUEST_TIMEOUT = float(os.environ.get("DEFAULT_REQUEST_TIMEOUT", 30))
