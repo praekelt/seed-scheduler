@@ -197,7 +197,14 @@ CELERY_ROUTES = {
 }
 
 METRICS_REALTIME = [
-    'schedules.created.sum'
+    'schedules.created.sum',
+    'scheduler.deliver_task.connection_error.sum',
+    'scheduler.deliver_task.http_error.400.sum',
+    'scheduler.deliver_task.http_error.401.sum',
+    'scheduler.deliver_task.http_error.403.sum',
+    'scheduler.deliver_task.http_error.404.sum',
+    'scheduler.deliver_task.http_error.500.sum',
+    'scheduler.deliver_task.timeout.sum',
 ]
 METRICS_SCHEDULED = [
 ]
