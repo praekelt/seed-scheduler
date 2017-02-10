@@ -9,8 +9,10 @@ from django.db import connection, transaction
 from django.utils.timezone import now
 from djcelery.models import CrontabSchedule, IntervalSchedule
 from go_http.metrics import MetricsApiClient
+from requests import exceptions as requests_exceptions
 
-from .models import Schedule, QueueTaskRun
+from seed_scheduler import utils
+from .models import Schedule, QueueTaskRun, ScheduleFailure
 
 
 logger = get_task_logger(__name__)
@@ -50,6 +52,8 @@ class DeliverTask(Task):
     Task to deliver scheduled hook
     """
     name = "seed_scheduler.scheduler.tasks.deliver_task"
+    default_retry_delay = 5
+    max_retries = 5
 
     def run(self, schedule_id, **kwargs):
         """
@@ -57,19 +61,52 @@ class DeliverTask(Task):
         """
         l = self.get_logger(**kwargs)
         l.info("Running instance of <%s>" % (schedule_id,))
+        if self.request.retries > 0:
+            retry_delay = utils.calculate_retry_delay(self.request.retries)
+        else:
+            retry_delay = self.default_retry_delay
 
-        # Load the schedule item
         schedule = Schedule.objects.get(id=schedule_id)
         headers = {"Content-Type": "application/json"}
         if schedule.auth_token is not None:
             headers["Authorization"] = "Token %s" % schedule.auth_token
-        requests.post(
-            url=schedule.endpoint,
-            data=json.dumps(schedule.payload),
-            headers=headers
-        )
+        try:
+            response = requests.post(
+                url=schedule.endpoint,
+                data=json.dumps(schedule.payload),
+                headers=headers,
+                timeout=settings.DEFAULT_REQUEST_TIMEOUT
+            )
+            # Expecting a 201, raise for errors.
+            response.raise_for_status()
+        except requests_exceptions.ConnectionError as exc:
+            l.info('Connection Error to endpoint: %s' % schedule.endpoint)
+            fire_metric.delay('scheduler.deliver_task.connection_error.sum', 1)
+            self.retry(exc=exc, countdown=retry_delay)
+        except requests_exceptions.HTTPError as exc:
+            # Recoverable HTTP errors: 500, 401
+            l.info('Request failed due to status: %s' %
+                   exc.response.status_code)
+            metric_name = ('scheduler.deliver_task.http_error.%s.sum' %
+                           exc.response.status_code)
+            fire_metric.delay(metric_name, 1)
+            self.retry(exc=exc, countdown=retry_delay)
+        except requests_exceptions.Timeout as exc:
+            l.info('Request failed due to timeout')
+            fire_metric.delay('scheduler.deliver_task.timeout.sum', 1)
+            self.retry(exc=exc, countdown=retry_delay)
 
         return True
+
+    def on_failure(self, exc, task_id, args, kwargs, einfo):
+        if self.request.retries == self.max_retries:
+            ScheduleFailure.objects.create(
+                schedule_id=args[0],
+                initiated_at=self.request.eta,
+                reason=einfo.exception.message,
+                task_id=task_id
+            )
+        super(DeliverTask, self).on_failure(exc, task_id, args, kwargs, einfo)
 
 
 deliver_task = DeliverTask()
@@ -188,3 +225,28 @@ class FireMetric(Task):
 
 
 fire_metric = FireMetric()
+
+
+class RequeueFailedTasks(Task):
+
+    """
+    Task to requeue failed schedules.
+    """
+    name = "seed_scheduler.scheduler.tasks.requeue_failed_tasks"
+
+    def run(self, **kwargs):
+        """
+        Runs an instance of a scheduled task
+        """
+        l = self.get_logger(**kwargs)
+        failures = ScheduleFailure.objects.all()
+        l.info("Attempting to requeue <%s> failed schedules" %
+               failures.count())
+        for failure in failures:
+            schedule_id = str(failure.schedule_id)
+            # Cleanup the failure before requeueing it.
+            failure.delete()
+            deliver_task.delay(schedule_id)
+
+
+requeue_failed_tasks = RequeueFailedTasks()

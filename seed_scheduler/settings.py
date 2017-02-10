@@ -188,6 +188,9 @@ CELERY_ROUTES = {
     'seed_scheduler.scheduler.tasks.queue_tasks': {
         'queue': 'priority',
     },
+    'seed_scheduler.scheduler.tasks.requeue_failed_tasks': {
+        'queue': 'priority',
+    },
     'seed_scheduler.scheduler.tasks.deliver_task': {
         'queue': 'lowpriority',
     },
@@ -197,7 +200,14 @@ CELERY_ROUTES = {
 }
 
 METRICS_REALTIME = [
-    'schedules.created.sum'
+    'schedules.created.sum',
+    'scheduler.deliver_task.connection_error.sum',
+    'scheduler.deliver_task.http_error.400.sum',
+    'scheduler.deliver_task.http_error.401.sum',
+    'scheduler.deliver_task.http_error.403.sum',
+    'scheduler.deliver_task.http_error.404.sum',
+    'scheduler.deliver_task.http_error.500.sum',
+    'scheduler.deliver_task.timeout.sum',
 ]
 METRICS_SCHEDULED = [
 ]
@@ -214,3 +224,5 @@ djcelery.setup_loader()
 
 METRICS_URL = os.environ.get("METRICS_URL", None)
 METRICS_AUTH_TOKEN = os.environ.get("METRICS_AUTH_TOKEN", "REPLACEME")
+
+DEFAULT_REQUEST_TIMEOUT = float(os.environ.get("DEFAULT_REQUEST_TIMEOUT", 30))
