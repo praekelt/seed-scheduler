@@ -597,6 +597,13 @@ class TestMetricsAPI(AuthenticatedAPITestCase):
         self.assertEqual(
             response.data["metrics_available"], [
                 'schedules.created.sum',
+                'scheduler.deliver_task.connection_error.sum',
+                'scheduler.deliver_task.http_error.400.sum',
+                'scheduler.deliver_task.http_error.401.sum',
+                'scheduler.deliver_task.http_error.403.sum',
+                'scheduler.deliver_task.http_error.404.sum',
+                'scheduler.deliver_task.http_error.500.sum',
+                'scheduler.deliver_task.timeout.sum',
             ]
         )
 
