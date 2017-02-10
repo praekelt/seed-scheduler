@@ -188,6 +188,9 @@ CELERY_ROUTES = {
     'seed_scheduler.scheduler.tasks.queue_tasks': {
         'queue': 'priority',
     },
+    'seed_scheduler.scheduler.tasks.requeue_failed_tasks': {
+        'queue': 'priority',
+    },
     'seed_scheduler.scheduler.tasks.deliver_task': {
         'queue': 'lowpriority',
     },

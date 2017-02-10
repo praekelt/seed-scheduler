@@ -225,3 +225,28 @@ class FireMetric(Task):
 
 
 fire_metric = FireMetric()
+
+
+class RequeueFailedTasks(Task):
+
+    """
+    Task to requeue failed schedules.
+    """
+    name = "seed_scheduler.scheduler.tasks.requeue_failed_tasks"
+
+    def run(self, **kwargs):
+        """
+        Runs an instance of a scheduled task
+        """
+        l = self.get_logger(**kwargs)
+        failures = ScheduleFailure.objects.all()
+        l.info("Attempting to requeue <%s> failed schedules" %
+               failures.count())
+        for failure in failures:
+            schedule_id = str(failure.schedule_id)
+            # Cleanup the failure before requeueing it.
+            failure.delete()
+            deliver_task.delay(schedule_id)
+
+
+requeue_failed_tasks = RequeueFailedTasks()
