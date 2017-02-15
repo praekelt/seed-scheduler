@@ -1,14 +1,17 @@
 from django.contrib.auth.models import User, Group
-from .models import Schedule
+
 from rest_hooks.models import Hook
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, mixins
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
+
+from .models import Schedule, ScheduleFailure
 from .serializers import (UserSerializer, GroupSerializer,
                           ScheduleSerializer, HookSerializer,
-                          CreateUserSerializer)
+                          CreateUserSerializer, ScheduleFailureSerializer)
+from .tasks import requeue_failed_tasks
 from seed_scheduler.utils import get_available_metrics
 # Uncomment line below if scheduled metrics are added
 # from .tasks import scheduled_metrics
@@ -132,4 +135,18 @@ class HealthcheckView(APIView):
                 }
             }
         }
+        return Response(resp, status=status)
+
+
+class FailedTaskViewSet(mixins.ListModelMixin,
+                        mixins.RetrieveModelMixin,
+                        viewsets.GenericViewSet):
+    permission_classes = (IsAuthenticated,)
+    queryset = ScheduleFailure.objects.all()
+    serializer_class = ScheduleFailureSerializer
+
+    def create(self, request):
+        status = 201
+        resp = {'requeued_failed_tasks': True}
+        requeue_failed_tasks.delay()
         return Response(resp, status=status)

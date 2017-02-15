@@ -239,10 +239,10 @@ class RequeueFailedTasks(Task):
         Runs an instance of a scheduled task
         """
         l = self.get_logger(**kwargs)
-        failures = ScheduleFailure.objects.all()
+        failures = ScheduleFailure.objects
         l.info("Attempting to requeue <%s> failed schedules" %
                failures.count())
-        for failure in failures:
+        for failure in failures.iterator():
             schedule_id = str(failure.schedule_id)
             # Cleanup the failure before requeueing it.
             failure.delete()
