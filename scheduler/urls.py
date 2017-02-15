@@ -7,6 +7,7 @@ router.register(r'user', views.UserViewSet)
 router.register(r'group', views.GroupViewSet)
 router.register(r'schedule', views.ScheduleViewSet)
 router.register(r'webhook', views.HookViewSet)
+router.register(r'failed-tasks', views.FailedTaskViewSet)
 
 # Wire up our API using automatic URL routing.
 # Additionally, we include login URLs for the browseable API.

@@ -1,7 +1,8 @@
 from django.contrib.auth.models import User, Group
-from .models import Schedule
 from rest_hooks.models import Hook
 from rest_framework import serializers
+
+from .models import Schedule, ScheduleFailure
 
 
 class UserSerializer(serializers.HyperlinkedModelSerializer):
@@ -38,3 +39,10 @@ class HookSerializer(serializers.ModelSerializer):
     class Meta:
         model = Hook
         read_only_fields = ('user',)
+
+
+class ScheduleFailureSerializer(serializers.HyperlinkedModelSerializer):
+
+    class Meta:
+        model = ScheduleFailure
+        fields = ('url', 'id', 'schedule', 'task_id', 'initiated_at', 'reason')
