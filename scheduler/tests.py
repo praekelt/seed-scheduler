@@ -23,8 +23,9 @@ from rest_hooks.models import Hook
 from requests_testadapter import TestAdapter, TestSession
 from go_http.metrics import MetricsApiClient
 
-from .models import Schedule, fire_metrics_if_new, QueueTaskRun
-from .tasks import deliver_task, queue_tasks, fire_metric
+from .models import (Schedule, fire_metrics_if_new, QueueTaskRun,
+                     ScheduleFailure)
+from .tasks import deliver_task, queue_tasks, fire_metric, requeue_failed_tasks
 from . import tasks
 
 from djcelery.models import PeriodicTask, CrontabSchedule, IntervalSchedule
@@ -584,6 +585,39 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
                          "http://example.com/trigger/")
         self.assertEqual(QueueTaskRun.objects.all().count(), 2)
 
+    @responses.activate
+    def test_requeue_failed_tasks(self):
+        expected_body = {
+            "run": 1
+        }
+
+        responses.add(
+            responses.POST,
+            "http://example.com/trigger/",
+            json.dumps(expected_body),
+            status=200, content_type='application/json')
+
+        schedule_data = {
+            "cron_definition": "25 * * * *",
+            "interval_definition": None,
+            "endpoint": "http://example.com/trigger/",
+            "payload": {"run": 1}
+        }
+        schedule = Schedule.objects.create(**schedule_data)
+        ScheduleFailure.objects.create(
+            schedule=schedule,
+            task_id=uuid4(),
+            initiated_at=timezone.now(),
+            reason='Error'
+        )
+
+        requeue_failed_tasks()
+
+        # Check
+        self.assertEqual(responses.calls[0].request.url,
+                         "http://example.com/trigger/")
+        self.assertEqual(ScheduleFailure.objects.all().count(), 0)
+
 
 class TestMetricsAPI(AuthenticatedAPITestCase):
 
@@ -597,6 +631,13 @@ class TestMetricsAPI(AuthenticatedAPITestCase):
         self.assertEqual(
             response.data["metrics_available"], [
                 'schedules.created.sum',
+                'scheduler.deliver_task.connection_error.sum',
+                'scheduler.deliver_task.http_error.400.sum',
+                'scheduler.deliver_task.http_error.401.sum',
+                'scheduler.deliver_task.http_error.403.sum',
+                'scheduler.deliver_task.http_error.404.sum',
+                'scheduler.deliver_task.http_error.500.sum',
+                'scheduler.deliver_task.timeout.sum',
             ]
         )
 
@@ -992,3 +1033,40 @@ class TestTriggerDeliverTasks(TestCase):
         self.assertEqual(
             stdout.getvalue().strip(),
             'Dry run for %s' % (str(resend),))
+
+
+class TestFailedTaskAPI(AuthenticatedAPITestCase):
+
+    @responses.activate
+    def test_failed_tasks_requeue(self):
+        expected_body = {
+            "run": 1
+        }
+
+        responses.add(
+            responses.POST,
+            "http://example.com/trigger/",
+            json.dumps(expected_body),
+            status=200, content_type='application/json')
+
+        schedule_data = {
+            "cron_definition": "25 * * * *",
+            "interval_definition": None,
+            "endpoint": "http://example.com/trigger/",
+            "payload": {"run": 1}
+        }
+        schedule = Schedule.objects.create(**schedule_data)
+        ScheduleFailure.objects.create(
+            schedule=schedule,
+            task_id=uuid4(),
+            initiated_at=timezone.now(),
+            reason='Error'
+        )
+
+        response = self.client.post('/api/v1/failed-tasks/',
+                                    content_type='application/json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["requeued_failed_tasks"], True)
+        self.assertEqual(responses.calls[0].request.url,
+                         "http://example.com/trigger/")
+        self.assertEqual(ScheduleFailure.objects.all().count(), 0)

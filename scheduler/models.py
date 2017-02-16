@@ -190,3 +190,14 @@ class QueueTaskRun(models.Model):
 
     def __str__(self):  # __unicode__ on Python 2
         return str(self.id)
+
+
+@python_2_unicode_compatible
+class ScheduleFailure(models.Model):
+    schedule = models.ForeignKey(Schedule, on_delete=models.CASCADE)
+    task_id = models.UUIDField()
+    initiated_at = models.DateTimeField()
+    reason = models.TextField()
+
+    def __str__(self):  # __unicode__ on Python 2
+        return str(self.id)
