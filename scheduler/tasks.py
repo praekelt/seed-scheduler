@@ -100,8 +100,12 @@ class DeliverTask(Task):
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
         if self.request.retries == self.max_retries:
+            if 'schedule_id' in kwargs:
+                schedule_id = kwargs['schedule_id']
+            else:
+                schedule_id = args[0]
             ScheduleFailure.objects.create(
-                schedule_id=args[0],
+                schedule_id=schedule_id,
                 initiated_at=self.request.eta,
                 reason=einfo.exception.message,
                 task_id=task_id

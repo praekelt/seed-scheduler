@@ -5,5 +5,5 @@ from __future__ import absolute_import
 from .celery import app as celery_app  # noqa
 
 
-__version__ = '0.9.4'
+__version__ = '0.9.5'
 VERSION = __version__
