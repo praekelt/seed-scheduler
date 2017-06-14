@@ -1,5 +1,6 @@
 import json
 import responses
+from freezegun import freeze_time
 from uuid import uuid4
 from django.utils.six import StringIO
 from datetime import timedelta
@@ -11,7 +12,7 @@ except ImportError:
     from urllib import urlencode
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.conf import settings
 from django.db.models.signals import post_save
 from django.core.management import call_command
@@ -584,6 +585,96 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
         self.assertEqual(responses.calls[0].request.url,
                          "http://example.com/trigger/")
         self.assertEqual(QueueTaskRun.objects.all().count(), 2)
+
+    @responses.activate
+    @freeze_time("2017-01-01 17:24:00")
+    @override_settings(DEFAULT_CLOCK_SKEW_SECONDS=120)  # 2 minutes
+    def test_queue_tasks_repeat_clock_skew(self):
+        expected_body = {
+            "run": 1
+        }
+        responses.add(
+            responses.POST,
+            "http://example.com/trigger/",
+            json.dumps(expected_body),
+            status=200, content_type='application/json')
+
+        schedule_data = {
+            "frequency": 2,
+            "cron_definition": "25 * * * *",
+            "interval_definition": None,
+            "endpoint": "http://example.com/trigger/",
+            "payload": {"run": 1}
+        }
+        schedule = Schedule.objects.create(**schedule_data)
+
+        # We allow for 2 minutes of clock skew in DEFAULT_CLOCK_SKEW_SECONDS
+        # With current date the next run should only be in 1 minute, this is
+        # inside our 2 minute allowance and we let it run
+
+        # Create a previous run
+        d1 = timezone.now()
+        QueueTaskRun.objects.create(
+            celery_cron_definition=schedule.celery_cron_definition,
+            task_id=uuid4(),
+            started_at=d1 - timedelta(minutes=59),
+            completed_at=d1
+        )
+
+        # Execute
+        result = queue_tasks.apply_async(kwargs={
+            "schedule_type": "crontab",
+            "lookup_id": schedule.celery_cron_definition.id})
+
+        # Check
+        self.assertEqual(result.get(), "Queued <1> Tasks")
+        self.assertEqual(responses.calls[0].request.url,
+                         "http://example.com/trigger/")
+        self.assertEqual(QueueTaskRun.objects.all().count(), 2)
+
+    @responses.activate
+    @freeze_time("2017-01-01 17:24:00")
+    @override_settings(DEFAULT_CLOCK_SKEW_SECONDS=10)  # 10 seconds
+    def test_queue_tasks_repeat_clock_skew_stop(self):
+        expected_body = {
+            "run": 1
+        }
+        responses.add(
+            responses.POST,
+            "http://example.com/trigger/",
+            json.dumps(expected_body),
+            status=200, content_type='application/json')
+
+        schedule_data = {
+            "frequency": 2,
+            "cron_definition": "25 * * * *",
+            "interval_definition": None,
+            "endpoint": "http://example.com/trigger/",
+            "payload": {"run": 1}
+        }
+        schedule = Schedule.objects.create(**schedule_data)
+
+        # We allow for 10 seconds of clock skew in DEFAULT_CLOCK_SKEW_SECONDS
+        # With current date the next run should only be in 1 minute, this is
+        # not inside our 10 second allowance and we it is stopped
+
+        # Create a previous run
+        d1 = timezone.now()
+        QueueTaskRun.objects.create(
+            celery_cron_definition=schedule.celery_cron_definition,
+            task_id=uuid4(),
+            started_at=d1 - timedelta(minutes=59),
+            completed_at=d1
+        )
+
+        # Execute
+        result = queue_tasks.apply_async(kwargs={
+            "schedule_type": "crontab",
+            "lookup_id": schedule.celery_cron_definition.id})
+
+        # Check
+        self.assertIn("Aborted Queuing", result.get())
+        self.assertEqual(QueueTaskRun.objects.all().count(), 1)
 
     @responses.activate
     def test_requeue_failed_tasks(self):

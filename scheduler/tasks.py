@@ -161,7 +161,7 @@ class QueueTasks(Task):
             # update their own last run time.
             sched = scheduler_type.objects.get(id=lookup_id)
             due, due_next = sched.schedule.is_due(last_task_run.started_at)
-            if not due:
+            if not due and due_next >= settings.DEFAULT_CLOCK_SKEW_SECONDS:
                 return ("Aborted Queuing <%s> <%s> due to last task run (%s) "
                         "at %s" % (schedule_type, lookup_id, last_task_run.id,
                                    last_task_run.started_at))
