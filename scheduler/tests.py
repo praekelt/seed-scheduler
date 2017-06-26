@@ -13,7 +13,6 @@ except ImportError:
 
 from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
-from django.conf import settings
 from django.db.models.signals import post_save
 from django.core.management import call_command
 from django.utils import timezone
@@ -22,12 +21,10 @@ from rest_framework.test import APIClient
 from rest_framework.authtoken.models import Token
 from rest_hooks.models import Hook
 from requests_testadapter import TestAdapter, TestSession
-from go_http.metrics import MetricsApiClient
 
 from .models import (Schedule, fire_metrics_if_new, QueueTaskRun,
                      ScheduleFailure)
 from .tasks import deliver_task, queue_tasks, fire_metric, requeue_failed_tasks
-from . import tasks
 
 from djcelery.models import PeriodicTask, CrontabSchedule, IntervalSchedule
 
@@ -65,18 +62,6 @@ class AuthenticatedAPITestCase(APITestCase):
         }
         return Schedule.objects.create(**schedule_data)
 
-    def _replace_get_metric_client(self, session=None):
-        return MetricsApiClient(
-            auth_token=settings.METRICS_AUTH_TOKEN,
-            api_url=settings.METRICS_URL,
-            session=self.session)
-
-    def _restore_get_metric_client(self, session=None):
-        return MetricsApiClient(
-            auth_token=settings.METRICS_AUTH_TOKEN,
-            api_url=settings.METRICS_URL,
-            session=session)
-
     def _replace_post_save_hooks(self):
         post_save.disconnect(fire_metrics_if_new, sender=Schedule)
 
@@ -86,7 +71,6 @@ class AuthenticatedAPITestCase(APITestCase):
     def setUp(self):
         super(AuthenticatedAPITestCase, self).setUp()
         self._replace_post_save_hooks()
-        tasks.get_metric_client = self._replace_get_metric_client
 
         self.username = 'testuser'
         self.password = 'testpass'
@@ -105,7 +89,6 @@ class AuthenticatedAPITestCase(APITestCase):
 
     def tearDown(self):
         self._restore_post_save_hooks()
-        tasks.get_metric_client = self._restore_get_metric_client
 
 
 class TestSchedudlerAppAPI(AuthenticatedAPITestCase):
@@ -766,37 +749,35 @@ class TestMetrics(AuthenticatedAPITestCase):
         else:
             self.assertEqual(json.loads(request.body), data)
 
-    def _mount_session(self):
-        response = [{
-            'name': 'foo',
-            'value': 9000,
-            'aggregator': 'bar',
-        }]
-        adapter = RecordingAdapter(json.dumps(response).encode('utf-8'))
-        self.session.mount(
-            "http://metrics-url/metrics/", adapter)
-        return adapter
+    def add_metrics_response(self):
+        """
+        Adds a response for any requests to the metrics API endpoint.
+        """
+        responses.add(
+            responses.POST, 'http://metrics-url/metrics/',
+            status=201, json={})
 
+    @responses.activate
     def test_direct_fire(self):
         # Setup
-        adapter = self._mount_session()
+        self.add_metrics_response()
         # Execute
         result = fire_metric.apply_async(kwargs={
             "metric_name": 'foo.last',
             "metric_value": 1,
-            "session": self.session
         })
         # Check
         self.check_request(
-            adapter.request, 'POST',
+            responses.calls[0].request, 'POST',
             data={"foo.last": 1.0}
         )
         self.assertEqual(result.get(),
                          "Fired metric <foo.last> with value <1.0>")
 
+    @responses.activate
     def test_created_metrics(self):
         # Setup
-        adapter = self._mount_session()
+        self.add_metrics_response()
         # reconnect metric post_save hook
         post_save.connect(fire_metrics_if_new, sender=Schedule)
 
@@ -805,7 +786,7 @@ class TestMetrics(AuthenticatedAPITestCase):
 
         # Check
         self.check_request(
-            adapter.request, 'POST',
+            responses.calls[0].request, 'POST',
             data={"schedules.created.sum": 1.0}
         )
         # remove post_save hooks to prevent teardown errors
