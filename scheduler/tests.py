@@ -104,6 +104,67 @@ class TestSchedudlerAppAPI(AuthenticatedAPITestCase):
                          "Status code on /api/token-auth was %s -should be 200"
                          % request.status_code)
 
+    def test_list_pagination_one_page(self):
+        schedule = self.make_schedule()
+
+        with self.settings(REST_FRAMEWORK={
+                'DEFAULT_PAGINATION_CLASS':
+                'rest_framework.pagination.CursorPagination',
+                'PAGE_SIZE': 2}):
+            response = self.client.get('/api/v1/schedule/')
+
+        body = response.json()
+        self.assertEqual(len(body['results']), 1)
+        self.assertEqual(body['results'][0]['id'], str(schedule.id))
+        self.assertIsNone(body['previous'])
+        self.assertIsNone(body['next'])
+
+    def test_list_pagination_two_pages(self):
+        schedules = []
+        for i in range(3):
+            schedules.append(self.make_schedule())
+
+        # Test first page
+        with self.settings(REST_FRAMEWORK={
+                'DEFAULT_PAGINATION_CLASS':
+                'rest_framework.pagination.CursorPagination',
+                'PAGE_SIZE': 2}):
+            response = self.client.get('/api/v1/schedule/')
+
+        body = response.json()
+        self.assertEqual(len(body['results']), 2)
+        self.assertEqual(body['results'][0]['id'], str(schedules[2].id))
+        self.assertEqual(body['results'][1]['id'], str(schedules[1].id))
+        self.assertIsNone(body['previous'])
+        self.assertIsNotNone(body['next'])
+
+        # Test next page
+        with self.settings(REST_FRAMEWORK={
+                'DEFAULT_PAGINATION_CLASS':
+                'rest_framework.pagination.CursorPagination',
+                'PAGE_SIZE': 2}):
+            response = self.client.get(body['next'])
+
+        body = response.json()
+        self.assertEqual(len(body['results']), 1)
+        self.assertEqual(body['results'][0]['id'], str(schedules[0].id))
+        self.assertIsNotNone(body['previous'])
+        self.assertIsNone(body['next'])
+
+        # Test going back to previous page works
+        with self.settings(REST_FRAMEWORK={
+                'DEFAULT_PAGINATION_CLASS':
+                'rest_framework.pagination.CursorPagination',
+                'PAGE_SIZE': 2}):
+            response = self.client.get(body['previous'])
+
+        body = response.json()
+        self.assertEqual(len(body['results']), 2)
+        self.assertEqual(body['results'][0]['id'], str(schedules[2].id))
+        self.assertEqual(body['results'][1]['id'], str(schedules[1].id))
+        self.assertIsNone(body['previous'])
+        self.assertIsNotNone(body['next'])
+
     def test_create_schedule_cron(self):
         post_data = {
             "frequency": 2,
