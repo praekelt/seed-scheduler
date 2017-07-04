@@ -107,11 +107,7 @@ class TestSchedudlerAppAPI(AuthenticatedAPITestCase):
     def test_list_pagination_one_page(self):
         schedule = self.make_schedule()
 
-        with self.settings(REST_FRAMEWORK={
-                'DEFAULT_PAGINATION_CLASS':
-                'rest_framework.pagination.CursorPagination',
-                'PAGE_SIZE': 2}):
-            response = self.client.get('/api/v1/schedule/')
+        response = self.client.get('/api/v1/schedule/')
 
         body = response.json()
         self.assertEqual(len(body['results']), 1)
@@ -125,11 +121,7 @@ class TestSchedudlerAppAPI(AuthenticatedAPITestCase):
             schedules.append(self.make_schedule())
 
         # Test first page
-        with self.settings(REST_FRAMEWORK={
-                'DEFAULT_PAGINATION_CLASS':
-                'rest_framework.pagination.CursorPagination',
-                'PAGE_SIZE': 2}):
-            response = self.client.get('/api/v1/schedule/')
+        response = self.client.get('/api/v1/schedule/')
 
         body = response.json()
         self.assertEqual(len(body['results']), 2)
@@ -139,11 +131,7 @@ class TestSchedudlerAppAPI(AuthenticatedAPITestCase):
         self.assertIsNotNone(body['next'])
 
         # Test next page
-        with self.settings(REST_FRAMEWORK={
-                'DEFAULT_PAGINATION_CLASS':
-                'rest_framework.pagination.CursorPagination',
-                'PAGE_SIZE': 2}):
-            response = self.client.get(body['next'])
+        response = self.client.get(body['next'])
 
         body = response.json()
         self.assertEqual(len(body['results']), 1)
@@ -152,11 +140,7 @@ class TestSchedudlerAppAPI(AuthenticatedAPITestCase):
         self.assertIsNone(body['next'])
 
         # Test going back to previous page works
-        with self.settings(REST_FRAMEWORK={
-                'DEFAULT_PAGINATION_CLASS':
-                'rest_framework.pagination.CursorPagination',
-                'PAGE_SIZE': 2}):
-            response = self.client.get(body['previous'])
+        response = self.client.get(body['previous'])
 
         body = response.json()
         self.assertEqual(len(body['results']), 2)
