@@ -11,7 +11,7 @@ except ImportError:
     from urlparse import urlparse
     from urllib import urlencode
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, Group
 from django.test import TestCase, override_settings
 from django.db.models.signals import post_save
 from django.core.management import call_command
@@ -91,7 +91,7 @@ class AuthenticatedAPITestCase(APITestCase):
         self._restore_post_save_hooks()
 
 
-class TestSchedudlerAppAPI(AuthenticatedAPITestCase):
+class TestSchedulerAppAPI(AuthenticatedAPITestCase):
 
     def test_login(self):
         request = self.client.post(
@@ -104,7 +104,67 @@ class TestSchedudlerAppAPI(AuthenticatedAPITestCase):
                          "Status code on /api/token-auth was %s -should be 200"
                          % request.status_code)
 
-    def test_list_pagination_one_page(self):
+    def test_user_list_pagination(self):
+        User.objects.create_user('testuser2', 'testuser2@example.com',
+                                 self.password)
+
+        response = self.client.get('/api/v1/user/')
+        self.assertEqual(response.status_code, 200)
+
+        # Test first page
+        body = response.json()
+        self.assertEqual(len(body['results']), 2)
+        self.assertEqual(body['results'][0]['username'], 'testuser2')
+        self.assertEqual(body['results'][1]['username'], 'testsu')
+        self.assertIsNone(body['previous'])
+        self.assertIsNotNone(body['next'])
+
+        # Test next page
+        body = self.client.get(body['next']).json()
+        self.assertEqual(len(body['results']), 1)
+        self.assertEqual(body['results'][0]['username'], 'testuser')
+        self.assertIsNotNone(body['previous'])
+        self.assertIsNone(body['next'])
+
+        # Test previous page
+        body = self.client.get(body['previous']).json()
+        self.assertEqual(len(body['results']), 2)
+        self.assertEqual(body['results'][0]['username'], 'testuser2')
+        self.assertEqual(body['results'][1]['username'], 'testsu')
+        self.assertIsNone(body['previous'])
+        self.assertIsNotNone(body['next'])
+
+    def test_group_list_pagination(self):
+        for i in range(1, 4):
+            Group.objects.create(name='group_%s' % i)
+
+        response = self.client.get('/api/v1/group/')
+        self.assertEqual(response.status_code, 200)
+
+        # Test first page
+        body = response.json()
+        self.assertEqual(len(body['results']), 2)
+        self.assertEqual(body['results'][0]['name'], 'group_3')
+        self.assertEqual(body['results'][1]['name'], 'group_2')
+        self.assertIsNone(body['previous'])
+        self.assertIsNotNone(body['next'])
+
+        # Test next page
+        body = self.client.get(body['next']).json()
+        self.assertEqual(len(body['results']), 1)
+        self.assertEqual(body['results'][0]['name'], 'group_1')
+        self.assertIsNotNone(body['previous'])
+        self.assertIsNone(body['next'])
+
+        # Test previous page
+        body = self.client.get(body['previous']).json()
+        self.assertEqual(len(body['results']), 2)
+        self.assertEqual(body['results'][0]['name'], 'group_3')
+        self.assertEqual(body['results'][1]['name'], 'group_2')
+        self.assertIsNone(body['previous'])
+        self.assertIsNotNone(body['next'])
+
+    def test_schedule_list_pagination_one_page(self):
         schedule = self.make_schedule()
 
         response = self.client.get('/api/v1/schedule/')
@@ -115,7 +175,7 @@ class TestSchedudlerAppAPI(AuthenticatedAPITestCase):
         self.assertIsNone(body['previous'])
         self.assertIsNone(body['next'])
 
-    def test_list_pagination_two_pages(self):
+    def test_schedule_list_pagination_two_pages(self):
         schedules = []
         for i in range(3):
             schedules.append(self.make_schedule())
@@ -1153,6 +1213,47 @@ class TestTriggerDeliverTasks(TestCase):
 
 
 class TestFailedTaskAPI(AuthenticatedAPITestCase):
+
+    def test_list_failed_tasks(self):
+        schedule_data = {
+            "cron_definition": "25 * * * *",
+            "interval_definition": None,
+            "endpoint": "http://example.com/trigger/",
+            "payload": {"run": 1}
+        }
+        schedule = Schedule.objects.create(**schedule_data)
+        failures = []
+        for i in range(3):
+            failures.append(ScheduleFailure.objects.create(
+                schedule=schedule,
+                task_id=uuid4(),
+                initiated_at=timezone.now(),
+                reason='Error'
+            ))
+
+        response = self.client.get('/api/v1/failed-tasks/',
+                                   content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+
+        body = response.json()
+        self.assertEqual(len(body['results']), 2)
+        self.assertEqual(body['results'][0]['id'], failures[2].id)
+        self.assertEqual(body['results'][1]['id'], failures[1].id)
+        self.assertIsNone(body['previous'])
+        self.assertIsNotNone(body['next'])
+
+        body = self.client.get(body['next']).json()
+        self.assertEqual(len(body['results']), 1)
+        self.assertEqual(body['results'][0]['id'], failures[0].id)
+        self.assertIsNotNone(body['previous'])
+        self.assertIsNone(body['next'])
+
+        body = self.client.get(body['previous']).json()
+        self.assertEqual(len(body['results']), 2)
+        self.assertEqual(body['results'][0]['id'], failures[2].id)
+        self.assertEqual(body['results'][1]['id'], failures[1].id)
+        self.assertIsNone(body['previous'])
+        self.assertIsNotNone(body['next'])
 
     @responses.activate
     def test_failed_tasks_requeue(self):
