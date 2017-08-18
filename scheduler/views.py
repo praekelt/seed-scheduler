@@ -22,6 +22,10 @@ class CreatedAtCursorPagination(CursorPagination):
     ordering = "-created_at"
 
 
+class IdCursorPagination(CursorPagination):
+    ordering = "-id"
+
+
 class HookViewSet(viewsets.ModelViewSet):
     """
     Retrieve, create, update or destroy webhooks.
@@ -29,6 +33,7 @@ class HookViewSet(viewsets.ModelViewSet):
     permission_classes = (IsAuthenticated,)
     queryset = Hook.objects.all()
     serializer_class = HookSerializer
+    pagination_class = IdCursorPagination
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -42,6 +47,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = (IsAuthenticated,)
     queryset = User.objects.all()
     serializer_class = UserSerializer
+    pagination_class = IdCursorPagination
 
 
 class GroupViewSet(viewsets.ReadOnlyModelViewSet):
@@ -52,6 +58,7 @@ class GroupViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = (IsAuthenticated,)
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
+    pagination_class = IdCursorPagination
 
 
 class UserView(APIView):
@@ -150,6 +157,7 @@ class FailedTaskViewSet(mixins.ListModelMixin,
     permission_classes = (IsAuthenticated,)
     queryset = ScheduleFailure.objects.all()
     serializer_class = ScheduleFailureSerializer
+    pagination_class = IdCursorPagination
 
     def create(self, request):
         status = 201
