@@ -2,7 +2,6 @@ from django.contrib.auth.models import User, Group
 
 from rest_hooks.models import Hook
 from rest_framework import viewsets, status, mixins
-from rest_framework.pagination import CursorPagination
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -16,10 +15,6 @@ from .tasks import requeue_failed_tasks
 from seed_scheduler.utils import get_available_metrics
 # Uncomment line below if scheduled metrics are added
 # from .tasks import scheduled_metrics
-
-
-class CreatedAtCursorPagination(CursorPagination):
-    ordering = "-created_at"
 
 
 class HookViewSet(viewsets.ModelViewSet):
@@ -85,7 +80,6 @@ class ScheduleViewSet(viewsets.ModelViewSet):
     permission_classes = (IsAuthenticated,)
     queryset = Schedule.objects.all()
     serializer_class = ScheduleSerializer
-    pagination_class = CreatedAtCursorPagination
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user,
