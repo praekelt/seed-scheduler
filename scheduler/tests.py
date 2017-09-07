@@ -978,10 +978,10 @@ class TestTriggerDeliverTasks(TestCase):
                 'after': since.isoformat(),
                 'before': until.isoformat(),
             }),),
-            status=200, body=json.dumps([{
+            status=200, body=json.dumps({'results': [{
                 "to_addr": msisdn,
                 "content": counter,
-            } for counter in range(outbound_count)]),
+            } for counter in range(outbound_count)]}),
             match_querystring=True)
 
     def mount_sbm_send(self, subscription_id):
