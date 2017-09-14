@@ -15,3 +15,6 @@ CELERY_RESULT_BACKEND = 'djcelery.backends.database:DatabaseBackend'
 
 METRICS_URL = "http://metrics-url"
 METRICS_AUTH_TOKEN = "REPLACEME"
+
+# REST Framework conf defaults
+REST_FRAMEWORK['PAGE_SIZE'] = 2
