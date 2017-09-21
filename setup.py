@@ -39,7 +39,7 @@ setup(
         'Django==1.9.12',
         'djangorestframework==3.3.2',
         'dj-database-url==0.3.0',
-        'psycopg2==2.6.2',
+        'psycopg2==2.7.1',
         'raven==5.32.0',
         'django-filter==0.12.0',
         'whitenoise==2.0.6',
@@ -49,7 +49,7 @@ setup(
         'pytz==2015.7',
         'django-rest-hooks==1.3.1',
         'crontab==0.20.5',
-        'go_http==0.3.0',
+        'seed-services-client==0.31.0',
         'drfdocs==0.0.11',
     ],
     classifiers=[

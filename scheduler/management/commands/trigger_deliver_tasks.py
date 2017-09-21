@@ -167,7 +167,7 @@ class Command(BaseCommand):
                     'before': until.isoformat(),
                     'after': since.isoformat(),
                 })
-                any_outbounds.extend(outbounds)
+                any_outbounds.extend(outbounds['results'])
 
             if any_outbounds:
                 continue

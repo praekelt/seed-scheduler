@@ -8,7 +8,7 @@ from django.conf import settings
 from django.db import connection, transaction
 from django.utils.timezone import now
 from djcelery.models import CrontabSchedule, IntervalSchedule
-from go_http.metrics import MetricsApiClient
+from seed_services_client.metrics import MetricsApiClient
 from requests import exceptions as requests_exceptions
 
 from seed_scheduler import utils
@@ -161,7 +161,7 @@ class QueueTasks(Task):
             # update their own last run time.
             sched = scheduler_type.objects.get(id=lookup_id)
             due, due_next = sched.schedule.is_due(last_task_run.started_at)
-            if not due:
+            if not due and due_next >= settings.DEFAULT_CLOCK_SKEW_SECONDS:
                 return ("Aborted Queuing <%s> <%s> due to last task run (%s) "
                         "at %s" % (schedule_type, lookup_id, last_task_run.id,
                                    last_task_run.started_at))
@@ -206,8 +206,8 @@ queue_tasks = QueueTasks()
 
 def get_metric_client(session=None):
     return MetricsApiClient(
-        auth_token=settings.METRICS_AUTH_TOKEN,
-        api_url=settings.METRICS_URL,
+        url=settings.METRICS_URL,
+        auth=settings.METRICS_AUTH,
         session=session)
 
 
@@ -223,7 +223,7 @@ class FireMetric(Task):
             metric_name: metric_value
         }
         metric_client = get_metric_client(session=session)
-        metric_client.fire(metric)
+        metric_client.fire_metrics(**metric)
         return "Fired metric <%s> with value <%s>" % (
             metric_name, metric_value)
 

@@ -1,5 +1,6 @@
 import json
 import responses
+from freezegun import freeze_time
 from uuid import uuid4
 from django.utils.six import StringIO
 from datetime import timedelta
@@ -10,9 +11,8 @@ except ImportError:
     from urlparse import urlparse
     from urllib import urlencode
 
-from django.contrib.auth.models import User
-from django.test import TestCase
-from django.conf import settings
+from django.contrib.auth.models import User, Group
+from django.test import TestCase, override_settings
 from django.db.models.signals import post_save
 from django.core.management import call_command
 from django.utils import timezone
@@ -21,12 +21,10 @@ from rest_framework.test import APIClient
 from rest_framework.authtoken.models import Token
 from rest_hooks.models import Hook
 from requests_testadapter import TestAdapter, TestSession
-from go_http.metrics import MetricsApiClient
 
 from .models import (Schedule, fire_metrics_if_new, QueueTaskRun,
                      ScheduleFailure)
 from .tasks import deliver_task, queue_tasks, fire_metric, requeue_failed_tasks
-from . import tasks
 
 from djcelery.models import PeriodicTask, CrontabSchedule, IntervalSchedule
 
@@ -64,18 +62,6 @@ class AuthenticatedAPITestCase(APITestCase):
         }
         return Schedule.objects.create(**schedule_data)
 
-    def _replace_get_metric_client(self, session=None):
-        return MetricsApiClient(
-            auth_token=settings.METRICS_AUTH_TOKEN,
-            api_url=settings.METRICS_URL,
-            session=self.session)
-
-    def _restore_get_metric_client(self, session=None):
-        return MetricsApiClient(
-            auth_token=settings.METRICS_AUTH_TOKEN,
-            api_url=settings.METRICS_URL,
-            session=session)
-
     def _replace_post_save_hooks(self):
         post_save.disconnect(fire_metrics_if_new, sender=Schedule)
 
@@ -85,7 +71,6 @@ class AuthenticatedAPITestCase(APITestCase):
     def setUp(self):
         super(AuthenticatedAPITestCase, self).setUp()
         self._replace_post_save_hooks()
-        tasks.get_metric_client = self._replace_get_metric_client
 
         self.username = 'testuser'
         self.password = 'testpass'
@@ -104,10 +89,9 @@ class AuthenticatedAPITestCase(APITestCase):
 
     def tearDown(self):
         self._restore_post_save_hooks()
-        tasks.get_metric_client = self._restore_get_metric_client
 
 
-class TestSchedudlerAppAPI(AuthenticatedAPITestCase):
+class TestSchedulerAppAPI(AuthenticatedAPITestCase):
 
     def test_login(self):
         request = self.client.post(
@@ -119,6 +103,111 @@ class TestSchedudlerAppAPI(AuthenticatedAPITestCase):
         self.assertEqual(request.status_code, 200,
                          "Status code on /api/token-auth was %s -should be 200"
                          % request.status_code)
+
+    def test_user_list_pagination(self):
+        User.objects.create_user('testuser2', 'testuser2@example.com',
+                                 self.password)
+
+        response = self.client.get('/api/v1/user/')
+        self.assertEqual(response.status_code, 200)
+
+        # Test first page
+        body = response.json()
+        self.assertEqual(len(body['results']), 2)
+        self.assertEqual(body['results'][0]['username'], 'testuser2')
+        self.assertEqual(body['results'][1]['username'], 'testsu')
+        self.assertIsNone(body['previous'])
+        self.assertIsNotNone(body['next'])
+
+        # Test next page
+        body = self.client.get(body['next']).json()
+        self.assertEqual(len(body['results']), 1)
+        self.assertEqual(body['results'][0]['username'], 'testuser')
+        self.assertIsNotNone(body['previous'])
+        self.assertIsNone(body['next'])
+
+        # Test previous page
+        body = self.client.get(body['previous']).json()
+        self.assertEqual(len(body['results']), 2)
+        self.assertEqual(body['results'][0]['username'], 'testuser2')
+        self.assertEqual(body['results'][1]['username'], 'testsu')
+        self.assertIsNone(body['previous'])
+        self.assertIsNotNone(body['next'])
+
+    def test_group_list_pagination(self):
+        for i in range(1, 4):
+            Group.objects.create(name='group_%s' % i)
+
+        response = self.client.get('/api/v1/group/')
+        self.assertEqual(response.status_code, 200)
+
+        # Test first page
+        body = response.json()
+        self.assertEqual(len(body['results']), 2)
+        self.assertEqual(body['results'][0]['name'], 'group_3')
+        self.assertEqual(body['results'][1]['name'], 'group_2')
+        self.assertIsNone(body['previous'])
+        self.assertIsNotNone(body['next'])
+
+        # Test next page
+        body = self.client.get(body['next']).json()
+        self.assertEqual(len(body['results']), 1)
+        self.assertEqual(body['results'][0]['name'], 'group_1')
+        self.assertIsNotNone(body['previous'])
+        self.assertIsNone(body['next'])
+
+        # Test previous page
+        body = self.client.get(body['previous']).json()
+        self.assertEqual(len(body['results']), 2)
+        self.assertEqual(body['results'][0]['name'], 'group_3')
+        self.assertEqual(body['results'][1]['name'], 'group_2')
+        self.assertIsNone(body['previous'])
+        self.assertIsNotNone(body['next'])
+
+    def test_schedule_list_pagination_one_page(self):
+        schedule = self.make_schedule()
+
+        response = self.client.get('/api/v1/schedule/')
+
+        body = response.json()
+        self.assertEqual(len(body['results']), 1)
+        self.assertEqual(body['results'][0]['id'], str(schedule.id))
+        self.assertIsNone(body['previous'])
+        self.assertIsNone(body['next'])
+
+    def test_schedule_list_pagination_two_pages(self):
+        schedules = []
+        for i in range(3):
+            schedules.append(self.make_schedule())
+
+        # Test first page
+        response = self.client.get('/api/v1/schedule/')
+
+        body = response.json()
+        self.assertEqual(len(body['results']), 2)
+        self.assertEqual(body['results'][0]['id'], str(schedules[2].id))
+        self.assertEqual(body['results'][1]['id'], str(schedules[1].id))
+        self.assertIsNone(body['previous'])
+        self.assertIsNotNone(body['next'])
+
+        # Test next page
+        response = self.client.get(body['next'])
+
+        body = response.json()
+        self.assertEqual(len(body['results']), 1)
+        self.assertEqual(body['results'][0]['id'], str(schedules[0].id))
+        self.assertIsNotNone(body['previous'])
+        self.assertIsNone(body['next'])
+
+        # Test going back to previous page works
+        response = self.client.get(body['previous'])
+
+        body = response.json()
+        self.assertEqual(len(body['results']), 2)
+        self.assertEqual(body['results'][0]['id'], str(schedules[2].id))
+        self.assertEqual(body['results'][1]['id'], str(schedules[1].id))
+        self.assertIsNone(body['previous'])
+        self.assertIsNotNone(body['next'])
 
     def test_create_schedule_cron(self):
         post_data = {
@@ -586,6 +675,96 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
         self.assertEqual(QueueTaskRun.objects.all().count(), 2)
 
     @responses.activate
+    @freeze_time("2017-01-01 17:24:00")
+    @override_settings(DEFAULT_CLOCK_SKEW_SECONDS=120)  # 2 minutes
+    def test_queue_tasks_repeat_clock_skew(self):
+        expected_body = {
+            "run": 1
+        }
+        responses.add(
+            responses.POST,
+            "http://example.com/trigger/",
+            json.dumps(expected_body),
+            status=200, content_type='application/json')
+
+        schedule_data = {
+            "frequency": 2,
+            "cron_definition": "25 * * * *",
+            "interval_definition": None,
+            "endpoint": "http://example.com/trigger/",
+            "payload": {"run": 1}
+        }
+        schedule = Schedule.objects.create(**schedule_data)
+
+        # We allow for 2 minutes of clock skew in DEFAULT_CLOCK_SKEW_SECONDS
+        # With current date the next run should only be in 1 minute, this is
+        # inside our 2 minute allowance and we let it run
+
+        # Create a previous run
+        d1 = timezone.now()
+        QueueTaskRun.objects.create(
+            celery_cron_definition=schedule.celery_cron_definition,
+            task_id=uuid4(),
+            started_at=d1 - timedelta(minutes=59),
+            completed_at=d1
+        )
+
+        # Execute
+        result = queue_tasks.apply_async(kwargs={
+            "schedule_type": "crontab",
+            "lookup_id": schedule.celery_cron_definition.id})
+
+        # Check
+        self.assertEqual(result.get(), "Queued <1> Tasks")
+        self.assertEqual(responses.calls[0].request.url,
+                         "http://example.com/trigger/")
+        self.assertEqual(QueueTaskRun.objects.all().count(), 2)
+
+    @responses.activate
+    @freeze_time("2017-01-01 17:24:00")
+    @override_settings(DEFAULT_CLOCK_SKEW_SECONDS=10)  # 10 seconds
+    def test_queue_tasks_repeat_clock_skew_stop(self):
+        expected_body = {
+            "run": 1
+        }
+        responses.add(
+            responses.POST,
+            "http://example.com/trigger/",
+            json.dumps(expected_body),
+            status=200, content_type='application/json')
+
+        schedule_data = {
+            "frequency": 2,
+            "cron_definition": "25 * * * *",
+            "interval_definition": None,
+            "endpoint": "http://example.com/trigger/",
+            "payload": {"run": 1}
+        }
+        schedule = Schedule.objects.create(**schedule_data)
+
+        # We allow for 10 seconds of clock skew in DEFAULT_CLOCK_SKEW_SECONDS
+        # With current date the next run should only be in 1 minute, this is
+        # not inside our 10 second allowance and we it is stopped
+
+        # Create a previous run
+        d1 = timezone.now()
+        QueueTaskRun.objects.create(
+            celery_cron_definition=schedule.celery_cron_definition,
+            task_id=uuid4(),
+            started_at=d1 - timedelta(minutes=59),
+            completed_at=d1
+        )
+
+        # Execute
+        result = queue_tasks.apply_async(kwargs={
+            "schedule_type": "crontab",
+            "lookup_id": schedule.celery_cron_definition.id})
+
+        # Check
+        self.assertIn("Aborted Queuing", result.get())
+        self.assertEqual(QueueTaskRun.objects.all().count(), 1)
+
+    @responses.activate
     def test_requeue_failed_tasks(self):
         expected_body = {
             "run": 1
@@ -675,37 +854,35 @@ class TestMetrics(AuthenticatedAPITestCase):
         else:
             self.assertEqual(json.loads(request.body), data)
 
-    def _mount_session(self):
-        response = [{
-            'name': 'foo',
-            'value': 9000,
-            'aggregator': 'bar',
-        }]
-        adapter = RecordingAdapter(json.dumps(response).encode('utf-8'))
-        self.session.mount(
-            "http://metrics-url/metrics/", adapter)
-        return adapter
+    def add_metrics_response(self):
+        """
+        Adds a response for any requests to the metrics API endpoint.
+        """
+        responses.add(
+            responses.POST, 'http://metrics-url/metrics/',
+            status=201, json={})
 
+    @responses.activate
     def test_direct_fire(self):
         # Setup
-        adapter = self._mount_session()
+        self.add_metrics_response()
         # Execute
         result = fire_metric.apply_async(kwargs={
             "metric_name": 'foo.last',
             "metric_value": 1,
-            "session": self.session
         })
         # Check
         self.check_request(
-            adapter.request, 'POST',
+            responses.calls[0].request, 'POST',
             data={"foo.last": 1.0}
         )
         self.assertEqual(result.get(),
                          "Fired metric <foo.last> with value <1.0>")
 
+    @responses.activate
     def test_created_metrics(self):
         # Setup
-        adapter = self._mount_session()
+        self.add_metrics_response()
         # reconnect metric post_save hook
         post_save.connect(fire_metrics_if_new, sender=Schedule)
 
@@ -714,7 +891,7 @@ class TestMetrics(AuthenticatedAPITestCase):
 
         # Check
         self.check_request(
-            adapter.request, 'POST',
+            responses.calls[0].request, 'POST',
             data={"schedules.created.sum": 1.0}
         )
         # remove post_save hooks to prevent teardown errors
@@ -906,10 +1083,10 @@ class TestTriggerDeliverTasks(TestCase):
                 'after': since.isoformat(),
                 'before': until.isoformat(),
             }),),
-            status=200, body=json.dumps([{
+            status=200, body=json.dumps({'results': [{
                 "to_addr": msisdn,
                 "content": counter,
-            } for counter in range(outbound_count)]),
+            } for counter in range(outbound_count)]}),
             match_querystring=True)
 
     def mount_sbm_send(self, subscription_id):
@@ -1036,6 +1213,47 @@ class TestTriggerDeliverTasks(TestCase):
 
 
 class TestFailedTaskAPI(AuthenticatedAPITestCase):
+
+    def test_list_failed_tasks(self):
+        schedule_data = {
+            "cron_definition": "25 * * * *",
+            "interval_definition": None,
+            "endpoint": "http://example.com/trigger/",
+            "payload": {"run": 1}
+        }
+        schedule = Schedule.objects.create(**schedule_data)
+        failures = []
+        for i in range(3):
+            failures.append(ScheduleFailure.objects.create(
+                schedule=schedule,
+                task_id=uuid4(),
+                initiated_at=timezone.now(),
+                reason='Error'
+            ))
+
+        response = self.client.get('/api/v1/failed-tasks/',
+                                   content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+
+        body = response.json()
+        self.assertEqual(len(body['results']), 2)
+        self.assertEqual(body['results'][0]['id'], failures[2].id)
+        self.assertEqual(body['results'][1]['id'], failures[1].id)
+        self.assertIsNone(body['previous'])
+        self.assertIsNotNone(body['next'])
+
+        body = self.client.get(body['next']).json()
+        self.assertEqual(len(body['results']), 1)
+        self.assertEqual(body['results'][0]['id'], failures[0].id)
+        self.assertIsNotNone(body['previous'])
+        self.assertIsNone(body['next'])
+
+        body = self.client.get(body['previous']).json()
+        self.assertEqual(len(body['results']), 2)
+        self.assertEqual(body['results'][0]['id'], failures[2].id)
+        self.assertEqual(body['results'][1]['id'], failures[1].id)
+        self.assertIsNone(body['previous'])
+        self.assertIsNotNone(body['next'])
 
     @responses.activate
     def test_failed_tasks_requeue(self):

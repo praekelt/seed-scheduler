@@ -2,6 +2,7 @@ from django.contrib.auth.models import User, Group
 
 from rest_hooks.models import Hook
 from rest_framework import viewsets, status, mixins
+from rest_framework.pagination import CursorPagination
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -17,6 +18,14 @@ from seed_scheduler.utils import get_available_metrics
 # from .tasks import scheduled_metrics
 
 
+class CreatedAtCursorPagination(CursorPagination):
+    ordering = "-created_at"
+
+
+class IdCursorPagination(CursorPagination):
+    ordering = "-id"
+
+
 class HookViewSet(viewsets.ModelViewSet):
     """
     Retrieve, create, update or destroy webhooks.
@@ -24,6 +33,7 @@ class HookViewSet(viewsets.ModelViewSet):
     permission_classes = (IsAuthenticated,)
     queryset = Hook.objects.all()
     serializer_class = HookSerializer
+    pagination_class = IdCursorPagination
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -37,6 +47,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = (IsAuthenticated,)
     queryset = User.objects.all()
     serializer_class = UserSerializer
+    pagination_class = IdCursorPagination
 
 
 class GroupViewSet(viewsets.ReadOnlyModelViewSet):
@@ -47,6 +58,7 @@ class GroupViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = (IsAuthenticated,)
     queryset = Group.objects.all()
     serializer_class = GroupSerializer
+    pagination_class = IdCursorPagination
 
 
 class UserView(APIView):
@@ -80,6 +92,7 @@ class ScheduleViewSet(viewsets.ModelViewSet):
     permission_classes = (IsAuthenticated,)
     queryset = Schedule.objects.all()
     serializer_class = ScheduleSerializer
+    pagination_class = CreatedAtCursorPagination
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user,
@@ -144,6 +157,7 @@ class FailedTaskViewSet(mixins.ListModelMixin,
     permission_classes = (IsAuthenticated,)
     queryset = ScheduleFailure.objects.all()
     serializer_class = ScheduleFailureSerializer
+    pagination_class = IdCursorPagination
 
     def create(self, request):
         status = 201

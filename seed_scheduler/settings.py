@@ -136,7 +136,8 @@ RAVEN_CONFIG = {
 
 # REST Framework conf defaults
 REST_FRAMEWORK = {
-    'PAGINATE_BY': 1000,
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.CursorPagination',
+    'PAGE_SIZE': 1000,
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework.authentication.BasicAuthentication',
         'rest_framework.authentication.TokenAuthentication',
@@ -223,6 +224,11 @@ CELERYD_MAX_TASKS_PER_CHILD = 50
 djcelery.setup_loader()
 
 METRICS_URL = os.environ.get("METRICS_URL", None)
-METRICS_AUTH_TOKEN = os.environ.get("METRICS_AUTH_TOKEN", "REPLACEME")
+METRICS_AUTH = (
+    os.environ.get("METRICS_AUTH_USER", "REPLACEME"),
+    os.environ.get("METRICS_AUTH_PASSWORD", "REPLACEME"),
+)
 
 DEFAULT_REQUEST_TIMEOUT = float(os.environ.get("DEFAULT_REQUEST_TIMEOUT", 30))
+DEFAULT_CLOCK_SKEW_SECONDS = int(
+    os.environ.get("DEFAULT_CLOCK_SKEW_SECONDS", 5))
