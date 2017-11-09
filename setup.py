@@ -51,6 +51,7 @@ setup(
         'crontab==0.20.5',
         'seed-services-client==0.31.0',
         'drfdocs==0.0.11',
+        'gevent==1.2.2',
     ],
     classifiers=[
         'Development Status :: 4 - Beta',
