@@ -177,7 +177,12 @@ class Command(BaseCommand):
             else:
                 self.stdout.write('%s' % (schedule,))
                 DeliverTask.apply_async(
-                    kwargs={"schedule_id": str(schedule.id)})
+                    kwargs={
+                        "schedule_id": str(schedule.id),
+                        "auth_token": schedule.auth_token,
+                        "endpoint": schedule.endpoint,
+                        "payload": schedule.payload,
+                    })
 
     def get_addresses(self, identity, default_addr_type):
         details = identity.get('details', {})

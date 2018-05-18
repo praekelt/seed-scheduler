@@ -431,7 +431,11 @@ class TestSchedudlerTasks(AuthenticatedAPITestCase):
 
         # Execute
         result = deliver_task.apply_async(kwargs={
-            "schedule_id": str(schedule.id)})
+            "schedule_id": str(schedule.id),
+            "auth_token": schedule.auth_token,
+            "endpoint": schedule.endpoint,
+            "payload": schedule.payload,
+            })
 
         # Check
         self.assertEqual(result.get(), True)

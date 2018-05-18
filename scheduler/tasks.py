@@ -55,7 +55,7 @@ class DeliverTask(Task):
     default_retry_delay = 5
     max_retries = 5
 
-    def run(self, schedule_id, **kwargs):
+    def run(self, schedule_id, auth_token, endpoint, payload, **kwargs):
         """
         Runs an instance of a scheduled task
         """
@@ -66,21 +66,20 @@ class DeliverTask(Task):
         else:
             retry_delay = self.default_retry_delay
 
-        schedule = Schedule.objects.get(id=schedule_id)
         headers = {"Content-Type": "application/json"}
-        if schedule.auth_token is not None:
-            headers["Authorization"] = "Token %s" % schedule.auth_token
+        if auth_token is not None:
+            headers["Authorization"] = "Token %s" % auth_token
         try:
             response = requests.post(
-                url=schedule.endpoint,
-                data=json.dumps(schedule.payload),
+                url=endpoint,
+                data=json.dumps(payload),
                 headers=headers,
                 timeout=settings.DEFAULT_REQUEST_TIMEOUT
             )
             # Expecting a 201, raise for errors.
             response.raise_for_status()
         except requests_exceptions.ConnectionError as exc:
-            l.info('Connection Error to endpoint: %s' % schedule.endpoint)
+            l.info('Connection Error to endpoint: %s' % endpoint)
             fire_metric.delay('scheduler.deliver_task.connection_error.sum', 1)
             self.retry(exc=exc, countdown=retry_delay)
         except requests_exceptions.HTTPError as exc:
@@ -226,10 +225,13 @@ class RequeueFailedTasks(Task):
         l.info("Attempting to requeue <%s> failed schedules" %
                failures.count())
         for failure in failures.iterator():
-            schedule_id = str(failure.schedule_id)
+            schedule = Schedule.objects.values(
+                'id', 'auth_token', 'endpoint', 'payload')
+            schedule = schedule.get(id=failure.schedule_id)
+            schedule['schedule_id'] = str(schedule.pop('id'))
             # Cleanup the failure before requeueing it.
             failure.delete()
-            deliver_task.delay(schedule_id)
+            DeliverTask.apply_async(kwargs=schedule)
 
 
 requeue_failed_tasks = RequeueFailedTasks()
