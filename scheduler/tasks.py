@@ -5,7 +5,6 @@ from uuid import uuid4
 from celery.task import Task
 from celery.utils.log import get_task_logger
 from django.conf import settings
-from django.db import connection, transaction
 from django.utils.timezone import now
 from djcelery.models import CrontabSchedule, IntervalSchedule
 from seed_services_client.metrics import MetricsApiClient
