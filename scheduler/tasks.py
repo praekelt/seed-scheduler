@@ -5,7 +5,6 @@ from uuid import uuid4
 from celery.task import Task
 from celery.utils.log import get_task_logger
 from django.conf import settings
-from django.db import connection, transaction
 from django.utils.timezone import now
 from djcelery.models import CrontabSchedule, IntervalSchedule
 from seed_services_client.metrics import MetricsApiClient
@@ -55,7 +54,7 @@ class DeliverTask(Task):
     default_retry_delay = 5
     max_retries = 5
 
-    def run(self, schedule_id, **kwargs):
+    def run(self, schedule_id, auth_token, endpoint, payload, **kwargs):
         """
         Runs an instance of a scheduled task
         """
@@ -66,21 +65,20 @@ class DeliverTask(Task):
         else:
             retry_delay = self.default_retry_delay
 
-        schedule = Schedule.objects.get(id=schedule_id)
         headers = {"Content-Type": "application/json"}
-        if schedule.auth_token is not None:
-            headers["Authorization"] = "Token %s" % schedule.auth_token
+        if auth_token is not None:
+            headers["Authorization"] = "Token %s" % auth_token
         try:
             response = requests.post(
-                url=schedule.endpoint,
-                data=json.dumps(schedule.payload),
+                url=endpoint,
+                data=json.dumps(payload),
                 headers=headers,
                 timeout=settings.DEFAULT_REQUEST_TIMEOUT
             )
             # Expecting a 201, raise for errors.
             response.raise_for_status()
         except requests_exceptions.ConnectionError as exc:
-            l.info('Connection Error to endpoint: %s' % schedule.endpoint)
+            l.info('Connection Error to endpoint: %s' % endpoint)
             fire_metric.delay('scheduler.deliver_task.connection_error.sum', 1)
             self.retry(exc=exc, countdown=retry_delay)
         except requests_exceptions.HTTPError as exc:
@@ -169,32 +167,11 @@ class QueueTasks(Task):
         task_run.save()
         # create tasks for each active schedule
         queued = 0
-        schedules = schedules.values('id')
-        with transaction.atomic(), connection.cursor() as cur:
-            # A named cursor is declared here to make psycopg2 use a server
-            # side cursor. The SSC prevents the entire result set from being
-            # loaded into memory.
-            # NOTE: this can be replaced with just a call to a queryset's
-            # iterator() method in Django 1.11 as that directly supports using
-            # a SSC.
-            query = str(schedules.query)
-            cursor_name = '_cur_queue_tasks_{uuid}'.format(uuid=uuid4().hex)
-            cur.execute(
-                "DECLARE {cursor_name} CURSOR FOR {query}".format(
-                    cursor_name=cursor_name,
-                    query=query
-                ),
-                {'lookup_id': lookup_id}
-            )
-            while True:
-                cur.execute("FETCH 10000 FROM {0}".format(cursor_name))
-                chunk = cur.fetchall()
-                if not chunk:
-                    break
-                for row in chunk:
-                    DeliverTask.apply_async(
-                        kwargs={"schedule_id": str(row[0])})
-                    queued += 1
+        schedules = schedules.values('id', 'auth_token', 'endpoint', 'payload')
+        for schedule in schedules.iterator():
+            schedule['schedule_id'] = str(schedule.pop('id'))
+            DeliverTask.apply_async(kwargs=schedule)
+            queued += 1
 
         task_run.completed_at = now()
         task_run.save()
@@ -247,10 +224,13 @@ class RequeueFailedTasks(Task):
         l.info("Attempting to requeue <%s> failed schedules" %
                failures.count())
         for failure in failures.iterator():
-            schedule_id = str(failure.schedule_id)
+            schedule = Schedule.objects.values(
+                'id', 'auth_token', 'endpoint', 'payload')
+            schedule = schedule.get(id=failure.schedule_id)
+            schedule['schedule_id'] = str(schedule.pop('id'))
             # Cleanup the failure before requeueing it.
             failure.delete()
-            deliver_task.delay(schedule_id)
+            DeliverTask.apply_async(kwargs=schedule)
 
 
 requeue_failed_tasks = RequeueFailedTasks()
