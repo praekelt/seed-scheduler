@@ -169,32 +169,11 @@ class QueueTasks(Task):
         task_run.save()
         # create tasks for each active schedule
         queued = 0
-        schedules = schedules.values('id')
-        with transaction.atomic(), connection.cursor() as cur:
-            # A named cursor is declared here to make psycopg2 use a server
-            # side cursor. The SSC prevents the entire result set from being
-            # loaded into memory.
-            # NOTE: this can be replaced with just a call to a queryset's
-            # iterator() method in Django 1.11 as that directly supports using
-            # a SSC.
-            query = str(schedules.query)
-            cursor_name = '_cur_queue_tasks_{uuid}'.format(uuid=uuid4().hex)
-            cur.execute(
-                "DECLARE {cursor_name} CURSOR FOR {query}".format(
-                    cursor_name=cursor_name,
-                    query=query
-                ),
-                {'lookup_id': lookup_id}
-            )
-            while True:
-                cur.execute("FETCH 10000 FROM {0}".format(cursor_name))
-                chunk = cur.fetchall()
-                if not chunk:
-                    break
-                for row in chunk:
-                    DeliverTask.apply_async(
-                        kwargs={"schedule_id": str(row[0])})
-                    queued += 1
+        schedules = schedules.values('id', 'auth_token', 'endpoint', 'payload')
+        for schedule in schedules.iterator():
+            schedule['schedule_id'] = str(schedule.pop('id'))
+            DeliverTask.apply_async(kwargs=schedule)
+            queued += 1
 
         task_run.completed_at = now()
         task_run.save()
