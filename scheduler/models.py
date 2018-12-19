@@ -83,9 +83,11 @@ class Schedule(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, related_name='schedules_created',
-                                   null=True, blank=True)
+                                   null=True, blank=True,
+                                   on_delete=models.SET_NULL)
     updated_by = models.ForeignKey(User, related_name='schedules_updated',
-                                   null=True, blank=True)
+                                   null=True, blank=True,
+                                   on_delete=models.SET_NULL)
     user = property(lambda self: self.created_by)
 
     def serialize_hook(self, hook):
