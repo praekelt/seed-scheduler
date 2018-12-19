@@ -15,8 +15,6 @@ except ImportError:
     from urlparse import urlparse
 
 
-
-
 def get_schedule(schedule_string):
     schedule_type, _, lookup_id = schedule_string.partition(":")
     if schedule_type == "crontab":

@@ -29,10 +29,6 @@ except ImportError:
     from urllib import urlencode
 
 
-
-
-
-
 class RecordingAdapter(TestAdapter):
 
     """ Record the request that was handled by the adapter.
