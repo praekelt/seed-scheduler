@@ -17,8 +17,8 @@ def validate_crontab(value):
         CronTab(value)
     except ValueError as e:
         raise ValidationError(
-            _('%(value)s is not a valid crontab string: %(reason)s'),
-            params={'value': value, 'reason': e},
+            _("%(value)s is not a valid crontab string: %(reason)s"),
+            params={"value": value, "reason": e},
         )
 
 
@@ -26,19 +26,22 @@ def validate_interval(value):
     try:
         every, period = value.split()
         int(every)
-        if period not in ["days", "hours", "minutes", "seconds",
-                          "microseconds"]:
+        if period not in ["days", "hours", "minutes", "seconds", "microseconds"]:
             raise ValidationError(
-                _("%(value)s is not a valid period. Accepted: days, hours, "
-                  "minutes, seconds, microseconds)"),
-                params={'value': value},
+                _(
+                    "%(value)s is not a valid period. Accepted: days, hours, "
+                    "minutes, seconds, microseconds)"
+                ),
+                params={"value": value},
             )
     except ValueError:
         raise ValidationError(
-            _("%(value)s is not a valid interval string: integer and "
-              "period (from: days, hours, minutes, seconds, microseconds) "
-              "e.g. 1 minutes"),
-            params={'value': value},
+            _(
+                "%(value)s is not a valid interval string: integer and "
+                "period (from: days, hours, minutes, seconds, microseconds) "
+                "e.g. 1 minutes"
+            ),
+            params={"value": value},
         )
 
 
@@ -55,25 +58,22 @@ class Schedule(models.Model):
     payload: what json encoded payload to include on the POST
     next_send_at: when the task is next expected to run (not guarenteed)
     """
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     # frequency and triggered are deprecated and will eventually be removed
     frequency = models.IntegerField(null=True, blank=True)
     triggered = models.IntegerField(null=False, blank=False, default=0)
-    cron_definition = models.CharField(max_length=500,
-                                       null=True, blank=True,
-                                       validators=[validate_crontab])
-    celery_cron_definition = models.ForeignKey(
-        CrontabSchedule,
-        on_delete=models.CASCADE,
-        null=True, blank=True
+    cron_definition = models.CharField(
+        max_length=500, null=True, blank=True, validators=[validate_crontab]
     )
-    interval_definition = models.CharField(max_length=100,
-                                           null=True, blank=True,
-                                           validators=[validate_interval])
+    celery_cron_definition = models.ForeignKey(
+        CrontabSchedule, on_delete=models.CASCADE, null=True, blank=True
+    )
+    interval_definition = models.CharField(
+        max_length=100, null=True, blank=True, validators=[validate_interval]
+    )
     celery_interval_definition = models.ForeignKey(
-        IntervalSchedule,
-        on_delete=models.CASCADE,
-        null=True, blank=True
+        IntervalSchedule, on_delete=models.CASCADE, null=True, blank=True
     )
     endpoint = models.CharField(max_length=500, null=False)
     auth_token = models.CharField(max_length=500, null=True, blank=True)
@@ -82,12 +82,20 @@ class Schedule(models.Model):
     enabled = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey(User, related_name='schedules_created',
-                                   null=True, blank=True,
-                                   on_delete=models.SET_NULL)
-    updated_by = models.ForeignKey(User, related_name='schedules_updated',
-                                   null=True, blank=True,
-                                   on_delete=models.SET_NULL)
+    created_by = models.ForeignKey(
+        User,
+        related_name="schedules_created",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
+    updated_by = models.ForeignKey(
+        User,
+        related_name="schedules_updated",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
     user = property(lambda self: self.created_by)
 
     def serialize_hook(self, hook):
@@ -96,20 +104,20 @@ class Schedule(models.Model):
         # metadata along for the ride as well
         # not sending auth token
         return {
-            'hook': hook.dict(),
-            'data': {
-                'id': str(self.id),
-                'frequency': self.frequency,
-                'triggered': self.triggered,
-                'cron_definition': self.cron_definition,
-                'interval_definition': self.interval_definition,
-                'endpoint': self.endpoint,
-                'payload': self.payload,
-                'next_send_at': self.next_send_at.isoformat(),
-                'enabled': self.enabled,
-                'created_at': self.created_at.isoformat(),
-                'updated_at': self.updated_at.isoformat()
-            }
+            "hook": hook.dict(),
+            "data": {
+                "id": str(self.id),
+                "frequency": self.frequency,
+                "triggered": self.triggered,
+                "cron_definition": self.cron_definition,
+                "interval_definition": self.interval_definition,
+                "endpoint": self.endpoint,
+                "payload": self.payload,
+                "next_send_at": self.next_send_at.isoformat(),
+                "enabled": self.enabled,
+                "created_at": self.created_at.isoformat(),
+                "updated_at": self.updated_at.isoformat(),
+            },
         }
 
     def __str__(self):  # __unicode__ on Python 2
@@ -118,9 +126,11 @@ class Schedule(models.Model):
 
 @receiver(pre_save, sender=Schedule)
 def schedule_saved(sender, instance, **kwargs):
-    if instance.cron_definition is not None and \
-            instance.cron_definition != "" and \
-            instance.celery_cron_definition is None:
+    if (
+        instance.cron_definition is not None
+        and instance.cron_definition != ""
+        and instance.celery_cron_definition is None
+    ):
         # CronTab package just used to parse and validate the string nicely.
         entry = CronTab(instance.cron_definition)
         schedule = {
@@ -128,7 +138,7 @@ def schedule_saved(sender, instance, **kwargs):
             "hour": entry.matchers.hour.input,
             "day_of_week": entry.matchers.weekday.input,
             "day_of_month": entry.matchers.day.input,
-            "month_of_year": entry.matchers.month.input
+            "month_of_year": entry.matchers.month.input,
         }
         cs, createdcs = CrontabSchedule.objects.get_or_create(**schedule)
         instance.celery_cron_definition = cs
@@ -139,17 +149,16 @@ def schedule_saved(sender, instance, **kwargs):
                 "task": "seed_scheduler.scheduler.tasks.queue_tasks",
                 "crontab": cs,
                 "enabled": True,
-                "args": '["crontab", %s]' % cs.id
+                "args": '["crontab", %s]' % cs.id,
             }
             PeriodicTask.objects.create(**pt)
-    if instance.interval_definition is not None and \
-            instance.interval_definition != "" and \
-            instance.celery_interval_definition is None:
+    if (
+        instance.interval_definition is not None
+        and instance.interval_definition != ""
+        and instance.celery_interval_definition is None
+    ):
         every, period = instance.interval_definition.split()
-        interval = {
-            "every": int(every),
-            "period": period
-        }
+        interval = {"every": int(every), "period": period}
         intsch, createdsch = IntervalSchedule.objects.get_or_create(**interval)
         instance.celery_interval_definition = intsch
         if createdsch:
@@ -159,7 +168,7 @@ def schedule_saved(sender, instance, **kwargs):
                 "task": "seed_scheduler.scheduler.tasks.queue_tasks",
                 "interval": intsch,
                 "enabled": True,
-                "args": '["interval", %s]' % intsch.id
+                "args": '["interval", %s]' % intsch.id,
             }
             PeriodicTask.objects.create(**pt)
 
@@ -167,25 +176,21 @@ def schedule_saved(sender, instance, **kwargs):
 @receiver(post_save, sender=Schedule)
 def fire_metrics_if_new(sender, instance, created, **kwargs):
     from .tasks import fire_metric
+
     if created:
-        fire_metric.apply_async(kwargs={
-            "metric_name": 'schedules.created.sum',
-            "metric_value": 1.0
-        })
+        fire_metric.apply_async(
+            kwargs={"metric_name": "schedules.created.sum", "metric_value": 1.0}
+        )
 
 
 @python_2_unicode_compatible
 class QueueTaskRun(models.Model):
     task_id = models.UUIDField()
     celery_cron_definition = models.ForeignKey(
-        CrontabSchedule,
-        on_delete=models.CASCADE,
-        null=True, blank=True
+        CrontabSchedule, on_delete=models.CASCADE, null=True, blank=True
     )
     celery_interval_definition = models.ForeignKey(
-        IntervalSchedule,
-        on_delete=models.CASCADE,
-        null=True, blank=True
+        IntervalSchedule, on_delete=models.CASCADE, null=True, blank=True
     )
     started_at = models.DateTimeField()
     completed_at = models.DateTimeField(null=True)

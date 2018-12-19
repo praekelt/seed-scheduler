@@ -11,44 +11,76 @@ import scheduler.models
 
 class Migration(migrations.Migration):
 
-    dependencies = [
-        ('scheduler', '0001_initial'),
-    ]
+    dependencies = [("scheduler", "0001_initial")]
 
     operations = [
         migrations.AlterField(
-            model_name='schedule',
-            name='celery_cron_definition',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='djcelery.CrontabSchedule'),
+            model_name="schedule",
+            name="celery_cron_definition",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                to="djcelery.CrontabSchedule",
+            ),
         ),
         migrations.AlterField(
-            model_name='schedule',
-            name='celery_interval_definition',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='djcelery.IntervalSchedule'),
+            model_name="schedule",
+            name="celery_interval_definition",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                to="djcelery.IntervalSchedule",
+            ),
         ),
         migrations.AlterField(
-            model_name='schedule',
-            name='created_by',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='schedules_created', to=settings.AUTH_USER_MODEL),
+            model_name="schedule",
+            name="created_by",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="schedules_created",
+                to=settings.AUTH_USER_MODEL,
+            ),
         ),
         migrations.AlterField(
-            model_name='schedule',
-            name='cron_definition',
-            field=models.CharField(blank=True, max_length=500, null=True, validators=[scheduler.models.validate_crontab]),
+            model_name="schedule",
+            name="cron_definition",
+            field=models.CharField(
+                blank=True,
+                max_length=500,
+                null=True,
+                validators=[scheduler.models.validate_crontab],
+            ),
         ),
         migrations.AlterField(
-            model_name='schedule',
-            name='interval_definition',
-            field=models.CharField(blank=True, max_length=100, null=True, validators=[scheduler.models.validate_interval]),
+            model_name="schedule",
+            name="interval_definition",
+            field=models.CharField(
+                blank=True,
+                max_length=100,
+                null=True,
+                validators=[scheduler.models.validate_interval],
+            ),
         ),
         migrations.AlterField(
-            model_name='schedule',
-            name='payload',
-            field=django.contrib.postgres.fields.jsonb.JSONField(blank=True, default={}, null=True),
+            model_name="schedule",
+            name="payload",
+            field=django.contrib.postgres.fields.jsonb.JSONField(
+                blank=True, default={}, null=True
+            ),
         ),
         migrations.AlterField(
-            model_name='schedule',
-            name='updated_by',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='schedules_updated', to=settings.AUTH_USER_MODEL),
+            model_name="schedule",
+            name="updated_by",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="schedules_updated",
+                to=settings.AUTH_USER_MODEL,
+            ),
         ),
     ]

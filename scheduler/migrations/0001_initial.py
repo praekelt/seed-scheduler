@@ -15,30 +15,82 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('djcelery', '0001_initial'),
+        ("djcelery", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='Schedule',
+            name="Schedule",
             fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('frequency', models.IntegerField(blank=True, null=True)),
-                ('triggered', models.IntegerField(default=0)),
-                ('cron_definition', models.CharField(max_length=500, null=True, validators=[scheduler.models.validate_crontab])),
-                ('interval_definition', models.CharField(max_length=100, null=True, validators=[scheduler.models.validate_interval])),
-                ('endpoint', models.CharField(max_length=500)),
-                ('auth_token', models.CharField(blank=True, max_length=500, null=True)),
-                ('payload', django.contrib.postgres.fields.jsonb.JSONField(default={})),
-                ('next_send_at', models.DateTimeField(blank=True, null=True)),
-                ('enabled', models.BooleanField(default=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('celery_cron_definition', models.ForeignKey(null=True, on_delete=django.db.models.deletion.CASCADE, to='djcelery.CrontabSchedule')),
-                ('celery_interval_definition', models.ForeignKey(null=True, on_delete=django.db.models.deletion.CASCADE, to='djcelery.IntervalSchedule')),
-                ('created_by', models.ForeignKey(null=True, on_delete=django.db.models.deletion.CASCADE, related_name='schedules_created', to=settings.AUTH_USER_MODEL)),
-                ('updated_by', models.ForeignKey(null=True, on_delete=django.db.models.deletion.CASCADE, related_name='schedules_updated', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.UUIDField(
+                        default=uuid.uuid4,
+                        editable=False,
+                        primary_key=True,
+                        serialize=False,
+                    ),
+                ),
+                ("frequency", models.IntegerField(blank=True, null=True)),
+                ("triggered", models.IntegerField(default=0)),
+                (
+                    "cron_definition",
+                    models.CharField(
+                        max_length=500,
+                        null=True,
+                        validators=[scheduler.models.validate_crontab],
+                    ),
+                ),
+                (
+                    "interval_definition",
+                    models.CharField(
+                        max_length=100,
+                        null=True,
+                        validators=[scheduler.models.validate_interval],
+                    ),
+                ),
+                ("endpoint", models.CharField(max_length=500)),
+                ("auth_token", models.CharField(blank=True, max_length=500, null=True)),
+                ("payload", django.contrib.postgres.fields.jsonb.JSONField(default={})),
+                ("next_send_at", models.DateTimeField(blank=True, null=True)),
+                ("enabled", models.BooleanField(default=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "celery_cron_definition",
+                    models.ForeignKey(
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="djcelery.CrontabSchedule",
+                    ),
+                ),
+                (
+                    "celery_interval_definition",
+                    models.ForeignKey(
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="djcelery.IntervalSchedule",
+                    ),
+                ),
+                (
+                    "created_by",
+                    models.ForeignKey(
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="schedules_created",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+                (
+                    "updated_by",
+                    models.ForeignKey(
+                        null=True,
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="schedules_updated",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
-        ),
+        )
     ]

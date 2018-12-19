@@ -8,19 +8,31 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
 
-    dependencies = [
-        ('scheduler', '0003_queuetaskrun'),
-    ]
+    dependencies = [("scheduler", "0003_queuetaskrun")]
 
     operations = [
         migrations.CreateModel(
-            name='ScheduleFailure',
+            name="ScheduleFailure",
             fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('task_id', models.UUIDField()),
-                ('initiated_at', models.DateTimeField()),
-                ('reason', models.TextField()),
-                ('schedule', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='scheduler.Schedule')),
+                (
+                    "id",
+                    models.AutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("task_id", models.UUIDField()),
+                ("initiated_at", models.DateTimeField()),
+                ("reason", models.TextField()),
+                (
+                    "schedule",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="scheduler.Schedule",
+                    ),
+                ),
             ],
-        ),
+        )
     ]
