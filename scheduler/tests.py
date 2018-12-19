@@ -19,7 +19,7 @@ from rest_hooks.models import Hook
 
 from seed_scheduler import celery_app
 
-from .models import QueueTaskRun, Schedule, ScheduleFailure, fire_metrics_if_new
+from .models import QueueTaskRun, Schedule, ScheduleFailure
 from .tasks import deliver_task, fire_metric, queue_tasks, requeue_failed_tasks
 
 try:
@@ -59,15 +59,8 @@ class AuthenticatedAPITestCase(APITestCase):
         }
         return Schedule.objects.create(**schedule_data)
 
-    def _replace_post_save_hooks(self):
-        post_save.disconnect(fire_metrics_if_new, sender=Schedule)
-
-    def _restore_post_save_hooks(self):
-        post_save.connect(fire_metrics_if_new, sender=Schedule)
-
     def setUp(self):
         super(AuthenticatedAPITestCase, self).setUp()
-        self._replace_post_save_hooks()
 
         self.username = "testuser"
         self.password = "testpass"
@@ -82,9 +75,6 @@ class AuthenticatedAPITestCase(APITestCase):
         )
         sutoken = Token.objects.create(user=self.superuser)
         self.adminclient.credentials(HTTP_AUTHORIZATION="Token %s" % sutoken)
-
-    def tearDown(self):
-        self._restore_post_save_hooks()
 
 
 class TestSchedulerAppAPI(AuthenticatedAPITestCase):
@@ -897,23 +887,6 @@ class TestMetrics(AuthenticatedAPITestCase):
         self.check_request(responses.calls[0].request, "POST", data={"foo.last": 1.0})
         self.assertEqual(result.get(), "Fired metric <foo.last> with value <1.0>")
 
-    @responses.activate
-    def test_created_metrics(self):
-        # Setup
-        self.add_metrics_response()
-        # reconnect metric post_save hook
-        post_save.connect(fire_metrics_if_new, sender=Schedule)
-
-        # Execute
-        self.make_schedule()
-
-        # Check
-        self.check_request(
-            responses.calls[0].request, "POST", data={"schedules.created.sum": 1.0}
-        )
-        # remove post_save hooks to prevent teardown errors
-        post_save.disconnect(fire_metrics_if_new, sender=Schedule)
-
 
 class TestUserCreation(AuthenticatedAPITestCase):
     def test_create_user_and_token(self):
@@ -1040,7 +1013,6 @@ class TestTriggerDeliverTasks(TestCase):
     timeout = 1
 
     def setUp(self):
-        post_save.disconnect(fire_metrics_if_new, sender=Schedule)
         self.session = TestSession()
         self.crontab_schedule = CrontabSchedule.objects.create(
             **{
