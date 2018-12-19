@@ -1,4 +1,4 @@
-from seed_scheduler.settings import *  # flake8: noqa
+from seed_scheduler.settings import *  # noqa: F403
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'TESTSEKRET'
@@ -14,4 +14,4 @@ METRICS_AUTH_TOKEN = "REPLACEME"
 PASSWORD_HASHERS = ("django.contrib.auth.hashers.MD5PasswordHasher",)
 
 # REST Framework conf defaults
-REST_FRAMEWORK['PAGE_SIZE'] = 2
+REST_FRAMEWORK['PAGE_SIZE'] = 2  # noqa: F405
