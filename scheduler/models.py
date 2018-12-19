@@ -77,7 +77,7 @@ class Schedule(models.Model):
     )
     endpoint = models.CharField(max_length=500, null=False)
     auth_token = models.CharField(max_length=500, null=True, blank=True)
-    payload = JSONField(null=True, blank=True, default={})
+    payload = JSONField(null=True, blank=True, default=dict)
     next_send_at = models.DateTimeField(null=True, blank=True)
     enabled = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
