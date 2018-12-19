@@ -47,6 +47,7 @@ setup(
         "django-rest-hooks==1.5.0",
         "crontab==0.22.4",
         "seed-services-client==0.37.0",
+        "django_prometheus==1.0.15",
     ],
     classifiers=[
         "Development Status :: 4 - Beta",
