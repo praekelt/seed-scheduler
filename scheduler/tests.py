@@ -1,9 +1,26 @@
 import json
-import responses
-from freezegun import freeze_time
-from uuid import uuid4
-from django.utils.six import StringIO
 from datetime import timedelta
+from uuid import uuid4
+
+import responses
+from django.contrib.auth.models import Group, User
+from django.core.management import call_command
+from django.db.models.signals import post_save
+from django.test import TestCase, override_settings
+from django.utils import timezone
+from django.utils.six import StringIO
+from djcelery.models import CrontabSchedule, IntervalSchedule, PeriodicTask
+from freezegun import freeze_time
+from requests_testadapter import TestAdapter, TestSession
+from rest_framework import status
+from rest_framework.authtoken.models import Token
+from rest_framework.test import APIClient
+from rest_hooks.models import Hook
+
+from seed_scheduler import celery_app
+
+from .models import QueueTaskRun, Schedule, ScheduleFailure, fire_metrics_if_new
+from .tasks import deliver_task, fire_metric, queue_tasks, requeue_failed_tasks
 
 try:
     from urllib.parse import urlparse, urlencode
@@ -11,23 +28,9 @@ except ImportError:
     from urlparse import urlparse
     from urllib import urlencode
 
-from django.contrib.auth.models import User, Group
-from django.test import TestCase, override_settings
-from django.db.models.signals import post_save
-from django.core.management import call_command
-from django.utils import timezone
-from rest_framework import status
-from rest_framework.test import APIClient
-from rest_framework.authtoken.models import Token
-from rest_hooks.models import Hook
-from requests_testadapter import TestAdapter, TestSession
 
-from .models import Schedule, fire_metrics_if_new, QueueTaskRun, ScheduleFailure
-from .tasks import deliver_task, queue_tasks, fire_metric, requeue_failed_tasks
 
-from djcelery.models import PeriodicTask, CrontabSchedule, IntervalSchedule
 
-from seed_scheduler import celery_app
 
 
 class RecordingAdapter(TestAdapter):

@@ -1,10 +1,12 @@
 import os
+
 from django.conf.urls import include, url
 from django.contrib import admin
 from django.urls import path
-from scheduler import views
 from rest_framework.authtoken.views import obtain_auth_token
 from rest_framework.documentation import include_docs_urls
+
+from scheduler import views
 
 admin.site.site_header = os.environ.get("SCHEDULER_TITLE", "Scheduler Admin")
 

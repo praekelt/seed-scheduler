@@ -1,6 +1,6 @@
-from django.contrib.auth.models import User, Group
-from rest_hooks.models import Hook
+from django.contrib.auth.models import Group, User
 from rest_framework import serializers
+from rest_hooks.models import Hook
 
 from .models import Schedule, ScheduleFailure
 

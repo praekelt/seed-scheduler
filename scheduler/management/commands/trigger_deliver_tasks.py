@@ -1,19 +1,20 @@
 import os
 import re
 
+from django.core.management import BaseCommand, CommandError
+from django.core.validators import URLValidator
+from django.utils.dateparse import parse_datetime
 from django.utils.six.moves import input
+
+from scheduler.models import Schedule
+from scheduler.tasks import DeliverTask
 
 try:
     from urllib.parse import urlparse
 except ImportError:
     from urlparse import urlparse
 
-from django.core.management import BaseCommand, CommandError
-from django.core.validators import URLValidator
-from django.utils.dateparse import parse_datetime
 
-from scheduler.models import Schedule
-from scheduler.tasks import DeliverTask
 
 
 def get_schedule(schedule_string):

@@ -1,6 +1,5 @@
-from django.utils.six.moves import input
-
 from django.core.management import BaseCommand, CommandError
+from django.utils.six.moves import input
 from djcelery.models import PeriodicTask
 from djcelery.schedulers import ModelEntry
 

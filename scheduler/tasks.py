@@ -1,18 +1,18 @@
 import json
-import requests
 from uuid import uuid4
 
+import requests
 from celery.task import Task
 from celery.utils.log import get_task_logger
 from django.conf import settings
 from django.utils.timezone import now
 from djcelery.models import CrontabSchedule, IntervalSchedule
-from seed_services_client.metrics import MetricsApiClient
 from requests import exceptions as requests_exceptions
+from seed_services_client.metrics import MetricsApiClient
 
 from seed_scheduler import utils
-from .models import Schedule, QueueTaskRun, ScheduleFailure
 
+from .models import QueueTaskRun, Schedule, ScheduleFailure
 
 logger = get_task_logger(__name__)
 

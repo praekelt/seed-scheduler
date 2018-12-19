@@ -1,24 +1,24 @@
-from django.contrib.auth.models import User, Group
-
-from rest_hooks.models import Hook
-from rest_framework import viewsets, status, mixins
-from rest_framework.pagination import CursorPagination
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
-from rest_framework.views import APIView
-from rest_framework.response import Response
+from django.contrib.auth.models import Group, User
+from rest_framework import mixins, status, viewsets
 from rest_framework.authtoken.models import Token
+from rest_framework.pagination import CursorPagination
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_hooks.models import Hook
+
+from seed_scheduler.utils import get_available_metrics
 
 from .models import Schedule, ScheduleFailure
 from .serializers import (
-    UserSerializer,
-    GroupSerializer,
-    ScheduleSerializer,
-    HookSerializer,
     CreateUserSerializer,
+    GroupSerializer,
+    HookSerializer,
     ScheduleFailureSerializer,
+    ScheduleSerializer,
+    UserSerializer,
 )
 from .tasks import requeue_failed_tasks
-from seed_scheduler.utils import get_available_metrics
 
 # Uncomment line below if scheduled metrics are added
 # from .tasks import scheduled_metrics
