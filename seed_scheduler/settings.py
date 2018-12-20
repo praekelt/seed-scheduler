@@ -52,17 +52,20 @@ INSTALLED_APPS = (
     "django_filters",
     "rest_hooks",
     "djcelery",
+    "django_prometheus",
     # us
     "scheduler",
 )
 
 MIDDLEWARE = (
+    "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "django_prometheus.middleware.PrometheusAfterMiddleware",
 )
 
 ROOT_URLCONF = "seed_scheduler.urls"
@@ -77,7 +80,8 @@ DATABASES = {
     "default": dj_database_url.config(
         default=os.environ.get(
             "SCHEDULER_DATABASE", "postgres://postgres:@localhost/seed_scheduler"
-        )
+        ),
+        engine="django_prometheus.db.backends.postgresql",
     )
 }
 
