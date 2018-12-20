@@ -7,10 +7,14 @@ services:
   - postgresql
 install:
   - "pip install -e ."
-  - "pip install -r requirements-dev.txt --use-wheel"
+  - "pip install -r requirements-dev.txt"
+  - createdb seed_scheduler
 script:
-  - flake8 .
-  - py.test --ds=seed_scheduler.testsettings */tests.py
+  - flake8
+  - black . --check
+  - isort -c -rc .
+  - python manage.py makemigrations --dry-run | grep 'No changes detected' || (echo 'There are changes which require migrations.' && exit 1)
+  - py.test
 deploy:
   provider: pypi
   user: praekelt.org
