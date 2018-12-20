@@ -7,7 +7,7 @@ Overview
 
 The Seed Scheduler requires the following dependencies to run:
 
-* Python 2.7
+* Python 3.6
 * PostgreSQL >= 9.3
 * Redis >= 2.10 or RabbitMQ >= 3.4 as the Celery Broker
 

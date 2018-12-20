@@ -58,8 +58,8 @@ class DeliverTask(Task):
         """
         Runs an instance of a scheduled task
         """
-        l = self.get_logger(**kwargs)
-        l.info("Running instance of <%s>" % (schedule_id,))
+        log = self.get_logger(**kwargs)
+        log.info("Running instance of <%s>" % (schedule_id,))
         if self.request.retries > 0:
             retry_delay = utils.calculate_retry_delay(self.request.retries)
         else:
@@ -78,19 +78,19 @@ class DeliverTask(Task):
             # Expecting a 201, raise for errors.
             response.raise_for_status()
         except requests_exceptions.ConnectionError as exc:
-            l.info('Connection Error to endpoint: %s' % endpoint)
+            log.info('Connection Error to endpoint: %s' % endpoint)
             fire_metric.delay('scheduler.deliver_task.connection_error.sum', 1)
             self.retry(exc=exc, countdown=retry_delay)
         except requests_exceptions.HTTPError as exc:
             # Recoverable HTTP errors: 500, 401
-            l.info('Request failed due to status: %s' %
-                   exc.response.status_code)
+            log.info('Request failed due to status: %s' %
+                     exc.response.status_code)
             metric_name = ('scheduler.deliver_task.http_error.%s.sum' %
                            exc.response.status_code)
             fire_metric.delay(metric_name, 1)
             self.retry(exc=exc, countdown=retry_delay)
         except requests_exceptions.Timeout as exc:
-            l.info('Request failed due to timeout')
+            log.info('Request failed due to timeout')
             fire_metric.delay('scheduler.deliver_task.timeout.sum', 1)
             self.retry(exc=exc, countdown=retry_delay)
 
@@ -126,8 +126,8 @@ class QueueTasks(Task):
         """
         Loads Schedule linked to provided lookup
         """
-        l = self.get_logger(**kwargs)
-        l.info("Queuing <%s> <%s>" % (schedule_type, lookup_id))
+        log = self.get_logger(**kwargs)
+        log.info("Queuing <%s> <%s>" % (schedule_type, lookup_id))
 
         task_run = QueueTaskRun()
         task_run.task_id = self.request.id or uuid4()
@@ -219,10 +219,10 @@ class RequeueFailedTasks(Task):
         """
         Runs an instance of a scheduled task
         """
-        l = self.get_logger(**kwargs)
+        log = self.get_logger(**kwargs)
         failures = ScheduleFailure.objects
-        l.info("Attempting to requeue <%s> failed schedules" %
-               failures.count())
+        log.info("Attempting to requeue <%s> failed schedules" %
+                 failures.count())
         for failure in failures.iterator():
             schedule = Schedule.objects.values(
                 'id', 'auth_token', 'endpoint', 'payload')
