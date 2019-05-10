@@ -97,6 +97,7 @@ class Schedule(models.Model):
         on_delete=models.SET_NULL,
     )
     user = property(lambda self: self.created_by)
+    last_run = models.DateTimeField(null=True)
 
     def serialize_hook(self, hook):
         # optional, there are serialization defaults

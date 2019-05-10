@@ -79,6 +79,8 @@ class DeliverTask(Task):
             )
             # Expecting a 201, raise for errors.
             response.raise_for_status()
+
+            Schedule.objects.filter(id=schedule_id).update(last_run=now())
         except requests_exceptions.ConnectionError as exc:
             log.info("Connection Error to endpoint: %s" % endpoint)
             fire_metric.delay("scheduler.deliver_task.connection_error.sum", 1)
