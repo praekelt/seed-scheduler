@@ -1127,6 +1127,7 @@ class TestTriggerDeliverTasks(TestCase):
             "Expected SBM to not send for %s but did." % (subscription_id,),
         )
 
+    @freeze_time("2017-01-01 17:24:00")
     @responses.activate
     def test_deliver_tasks_interval(self):
 
@@ -1166,6 +1167,8 @@ class TestTriggerDeliverTasks(TestCase):
         self.mount_outbound("+27222222222", since=since, until=until, outbound_count=0)
         self.mount_sbm_send("subscription-uuid-2")
 
+        self.assertIsNone(resend.last_run)
+
         call_command(
             "trigger_deliver_tasks",
             "--identity-store-token",
@@ -1189,6 +1192,9 @@ class TestTriggerDeliverTasks(TestCase):
         self.assertNotSBMSend("subscription-uuid-1")
         self.assertSBMSend("subscription-uuid-2")
         self.assertEqual(stdout.getvalue().strip(), str(resend))
+
+        resend.refresh_from_db()
+        self.assertEqual(resend.last_run, timezone.now())
 
     @responses.activate
     def test_deliver_tasks_dry_run(self):
