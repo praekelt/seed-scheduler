@@ -1,3 +1,7 @@
+0.10.2
+------
+ - Upgrade dependancies that had security vulneribilities
+
 0.10.1
 ------
  - Add timestamp to schedules for monitoring
