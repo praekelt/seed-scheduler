@@ -1,3 +1,7 @@
+0.10.3
+------
+ - Upgrade Django to 2.2.8 (Security vulnerability)
+
 0.10.2
 ------
  - Upgrade dependancies that had security vulneribilities
